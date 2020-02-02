@@ -4,18 +4,24 @@ module kDTSPN
 
 import Base: show
 
-#using Dubins
+using Dubins
 using Random
 using Test
+using PyPlot
 include("./linked_stack.jl")
 include("./FindingCliques.jl")
 using .Stack
 
+Circle = matplotlib.patches.Circle
 
 input_file_path = "./problem.txt";
 delimiter = " ";
 population_size = 200;
 number_of_iterations = 1000;
+
+# local search stops when optimized points converge to a value that is
+# less than this number away from previously optimized value
+local_search_stop_criterion = 0.001;
 
 
 struct Point{T<:AbstractFloat}
@@ -116,17 +122,69 @@ function squash_regions(A)
 	
 end
 
+#=
+  Calculate Dubins shortest path for individual using Dubins maneuvers
+=#
+function evaluate_individual(ind::Individual)
 
-function local_search(ind::Individual)
-	updating_points = [true for i in 1:length(ind.permutation)];
-	while(sum(updating_points > 0))
-		for i in 1:length(ind.permutation)
+	for i in length(ind.starting_points)
+		# calculate path for selected vehicle
+		part_path = []
+	end
+end
+
+#=
+  calculates new positions for points of individual, accepts indivudal definition
+  and vector of regions, which contains union of starting region with rest of the regions
+  regions = starting_region ∪ regions. Updates the supplied individual with new set of points
+=#
+function local_search!(ind::Individual, regions::Vector{Region})
+	
+	points = [i + 1 for i in 1:length(ind.permutation)];
+	
+	#add starting points to sequence of points
+	all_points = [];
+	for i in 1:length(ind.starting_points)-1
+		all_points = vcat(all_points, 1, points[ind.starting_points[i]:ind.starting_points[i+1]]);
+	end
+	
+	all_points = vcat(all_points, 1, points[ind.starting_points[length(ind.starting_points) - 1]:end]);
+	println(all_points);
+	
+	# update starting points indexes 
+	starting_points = [ind.starting_points[i]+i-1 for i in 1:ind.starting_points];
+	
+	len = length(starting_points)
+	for i in 1:len
+		diff = typemax(Float32);
+		current_sequence = (i==len ? all_points[starting_points[i]:end] : all_points[starting_points[i]:starting_points[i+1]]);
 		
-			# update each point with optimized point
-			if 1 < i < length(ind.permutation) - 1
-				#point = projected_point(ind.)
-			end
-			projected_point()
+		# add starting point specific to sequence and rest of the points to current points
+		current_points = vcat(ind.starting_points[i], ind.points_positions);
+		
+		while diff > local_search_stop_criterion
+			# while not converged optimized current subsequence
+			
+			# optimize subsequence
+			optimized = [j == length(current_sequence) ? 
+			projected_point(ind.points_positions[current_sequence[j-1]], ind.points_positions[current_sequence[1]], 
+				ind.points_positions[current_sequence[j]], regions[current_sequence[j]]) :
+			j == 1 ? projected_point(ind.points_positions[current_sequence[end]], ind.points_positions[current_sequence[j+1]], 
+				ind.points_positions[current_sequence[j]], regions[current_sequence[j]]) :
+			projected_point(ind.points_positions[current_sequence[j-1]],ind.points_positions[current_sequence[j+1]], 
+				ind.points_positions[current_sequence[j], regions[current_sequence[j]]])
+			for j in 1 : length(current_sequence)];
+			
+			diff = distance(optimized, current_points[current_sequence]);
+			current_points[current_sequence] = optimized;
+		end
+		
+		# copy optimized points back to individual
+		ind.starting_points[i] = current_points[1];
+		
+		# start from second point as first i starting point
+		for j in 2:length(current_sequence)
+			ind.points_positions[current_sequence[j]-1] = current_points[j];
 		end
 	end
 end
@@ -135,7 +193,7 @@ end
   Find projection for point point_c. Where point_a, point_b are neighbourhood points of point point_c.
   point_c is the projected point and region_c is the region of point point_c.
 =#
-function projected_point(point_a::Point{Float32}, point_b::Point{Float32}, point_c::Point{Float32}, region_c::Region{Float32})
+function projected_point(point_a::Point{T}, point_b::Point{T}, point_c::Point{T}, region_c::Region{T}) where T <: AbstractFloat
 	
 	# for points point_a, point_b find general equation of line
 	normal_vector_ab = (point_b.y - point_a.y, point_a.x - point_b.x);
@@ -144,26 +202,27 @@ function projected_point(point_a::Point{Float32}, point_b::Point{Float32}, point
 	# for line between points point_a, point_b we find general equation for perpendicular line
 	# to this line intersecting point_c
 	normal_vector_c_ab = (point_b.x - point_a.x, point_a.y - point_b.y);
-	general_line_equation_c_ab = (general_line_equation_c_ab[1], general_line_equation_c_ab[2], -general_line_equation_c_ab[1]*point_c.x 
-	-general_line_equation_c_ab[2]*point_c.y);
+	general_line_equation_c_ab = (normal_vector_c_ab[1], normal_vector_c_ab[2], -normal_vector_c_ab[1]*point_c.x 
+	-normal_vector_c_ab[2]*point_c.y);
 	
 	#find intersection of line between points point_a and point_b and perpendicular line
 	# to this line containing point_c
 	intersection_y = (general_line_equation_ab[1]*general_line_equation_c_ab[3] - general_line_equation_ab[3]*general_line_equation_c_ab[1]) /
 		(general_line_equation_c_ab[1]*general_line_equation_ab[2] - general_line_equation_ab[1]*general_line_equation_c_ab[2]);
 	
-	intersection_x = (-general_line_equation_ab[2]*intersection_y - general_line_equation_ab[3]) / general_line_equation_ab[1];
+	
+	
+	intersection_x = general_line_equation_ab[1] != 0 ? 
+		((-general_line_equation_ab[2]*intersection_y - general_line_equation_ab[3]) / general_line_equation_ab[1]) :
+		((-general_line_equation_c_ab[2]*intersection_y - general_line_equation_c_ab[3]) / general_line_equation_c_ab[1]);
 	
 	# find out if intersection lies on the line between points point_a and point_b
 	is_between = max(distance(intersection_x, intersection_y, point_a.x, point_a.y),
 		distance(intersection_x, intersection_y, point_b.x, point_b.y)) <=  distance(point_a.x, point_a.y, point_b.x, point_b.y);
 	if is_between
 		# find intersection of perpendicular line with region
-		(y1, y2) = solve_quadratic_equation(-general_line_equation_ab[2]/4 + 1, 
-			general_line_equation_ab[2]*general_line_equation_ab[3] + general_line_equation_ab[2]*region_c.center.x - 2*region_c.center.y,
-			-general_line_equation_ab[3]+2*general_line_equation_ab[3]*region_c.center.x+region_c.center.x^2+region_c.center.y^2-region_c.radius^2);
-		points = ([(-b/2 * y1 - general_line_equation_ab[3], y1), (-b/2 * y2 - general_line_equation_ab[3], y2)]);
-		
+		points = find_intersection_of_line_and_circle(general_line_equation_c_ab[1],general_line_equation_c_ab[2],general_line_equation_c_ab[3],
+			region_c.center.x, region_c.center.y, region_c.radius);
 		# return point closer to intersection point of two lines
 		if distance(points[1][1], points[1][2],intersection_x, intersection_y) < distance(points[2][1], points[2][2],intersection_x, intersection_y)
 			return points[1];
@@ -179,10 +238,8 @@ function projected_point(point_a::Point{Float32}, point_b::Point{Float32}, point
 		general_line_equation = (normal_vector[1], normal_vector[2], -normal_vector[1]*point_c.x -normal_vector[2]*point_c.y);
 		
 		# find intersection of line and region
-		(y1, y2) = solve_quadratic_equation(-general_line_equation[2]/4 + 1, 
-			general_line_equation[2]*general_line_equation[3] + general_line_equation[2]*region_c.center.x - 2*region_c.center.y,
-			-general_line_equation[3]+2*general_line_equation[3]*region_c.center.x+region_c.center.x^2+region_c.center.y^2-region_c.radius^2);
-		points = ([(-b/2 * y1 - general_line_equation[3], y1), (-b/2 * y2 - general_line_equation[3], y2)]);
+		points = find_intersection_of_line_and_circle(general_line_equation[1],general_line_equation[2],general_line_equation[3],
+			region_c.center.x, region_c.center.y, region_c.radius);
 		
 		# return point closer to center of points point_a and point_b
 		if distance(points[1][1], points[1][2],center_x, center_y) < distance(points[2][1], points[2][2],center_x, center_y)
@@ -191,6 +248,59 @@ function projected_point(point_a::Point{Float32}, point_b::Point{Float32}, point
 			return points[2];
 		end
 	end
+end
+
+function testProjectPoint()
+	r = Region(Point(5.0,5.0), 2.0);
+	a = Point(3.0,0.0);
+	b = Point(6.0,0.0);
+	c = Point(5.0, 5.0);
+	
+	projected = projected_point(a, b, c, r);
+	println(projected);
+	
+	
+	
+	pyplot();
+	xy = Vector{Float32}();
+	xy.push(r.center.x);
+	xy.push(r.center.y);
+    circle = Circle(xy, r.radius, facecolor="yellow", edgecolor="orange",
+       linewidth=1, alpha=0.2);
+	
+end
+
+#=
+ returns two points (x1,y1) and (x2,y2) that lie on the intersection of circle with line
+ a,b,c determine the equation of the line and (s1,s2) - center of the circle, r determines
+ the radius of the circle
+=#
+function find_intersection_of_line_and_circle(a1, b1, c1, s1, s2, r)
+	if(a1 == 0)
+		y = -c1/b1;
+		b = -2*s1;
+		c = s1^2 + y^2 - 2*s2*y + s2^2 - r^2;
+		(x1, x2) = solve_quadratic_equation(1, b, c);
+		return [(x1,y1),(x2,y1)];
+	end
+	a = b1^2/a1^2 + 1;
+	b = -2*b1*c1/a1^2 - 2*s1*b1/a1 - 2*s2;
+	c = c1^2/a1^2+2*s1*c1/a1 + s1^2 + s2^2 - r^2;
+	(y1, y2) = solve_quadratic_equation(a, b, c);
+	if y1 == y2
+		b = -2*s1;
+		c = s1^2 + y1^2 - 2*s2*y1 + s2^2 - r^2;
+		(x1, x2) = solve_quadratic_equation(1, b, c);
+		return [(x1,y1),(x2,y1)];
+	else
+		x1 = (b1*y1 - c1) / a1;
+		x2 = (b1*y2 - c1) / a1;
+		return [(x1,y1),(x2,y2)];
+	end
+end
+
+function distance(a::Vector{Point{Float32}},b::Vector{Point{Float32}})
+	return sum([distance(a[i].x,a[i].y,b[i].x,b[i].y) for i in 1:length(a)])
 end
 
 function distance(x1, y1, x2, y2)
@@ -203,10 +313,13 @@ function distance(a::Point{Float32}, b::Point{Float32})
 		+ (a.y - b.y) ^ 2);
 end
 
-# finds roots of quadrativ equation a*x^2 + b*x + c = 0
+# finds roots of quadratic equation a*x^2 + b*x + c = 0
 function solve_quadratic_equation(a, b, c)
 	discriminant = b^2 - 4*a*c;
-	return ((-b + sqrt(discriminant)) / 2*a, (-b - sqrt(discriminant)) / 2*a);
+	if(discriminant < 0)
+		error("No solution which lies within set of real numbers found");
+	end
+	return ((-b + sqrt(discriminant)) / (2*a), (-b - sqrt(discriminant)) / (2*a));
 end
 
 
@@ -245,13 +358,18 @@ function generate_individual(total_points_count::Integer, starting_points_count:
 	permutation = randperm(total_points_count);
 
 	taken = [];
+	
+	# automatically add 1 as starting point
+	push!(taken, 1);
+	
+	# add other starting points randomly, starting from 2...
 	free = LinkedStack{Integer}();
-	free_size = total_points_count;
-	for i in 1:total_points_count
+	free_size = total_points_count-1;
+	for i in 2:total_points_count
 		push!(free, i);
 	end
-
-	for i in 1:starting_points_count
+	
+	for i in 2:starting_points_count
 		pos = rand(1:free_size);
 		push!(taken, popAt!(free, pos));
 		free_size = free_size - 1;
@@ -582,23 +700,37 @@ function test_overlapping_regions()
 end
 
 function main()
-	(number_vehicles, starting_region, regions) = parseInput();
+	#=(number_vehicles, starting_region, regions) = parseInput();
 	centers = [regions[i].center for i in 1:length(regions)];
 	radiuses = [regions[i].radius for i in 1:length(regions)];
 
-	population = [generate_individual(length(regions), number_vehicles, starting_region.center, centers) for i in 1:population_size];
+	a = Vector{Point{Float32}}();
+	push!(a, Point(3.0,4.0);
+	push!(a, Point(3.0,4.0);
+	push!(a, Point(3.0,4.0);
+	a[1] = Point(3.0,5.0);
+	println(a[1]);
+	
+	#= population = [generate_individual(length(regions), number_vehicles, starting_region.center, centers) for i in 1:population_size];
+	
 	for i in 1:number_of_iterations
-		#local search
+		# local search
+		local_regions = vcat(starting_region, regions);
+		for i in 1:length(population)
+			local_search!(population[i], local_regions);
+		end
 		#evaluation
 		#selection
 		#crossover
 		#mutace
-	end
-	
+	end =#
+	=#
 	
 end
+	
+testProjectPoint();
 
-main();
+#main();
 
 #test_overlapping_regions();
 #test_mutate();
