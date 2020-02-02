@@ -8,7 +8,15 @@ import Base: show
 using Random
 using Test
 include("./linked_stack.jl")
+include("./FindingCliques.jl")
 using .Stack
+
+
+input_file_path = "./problem.txt";
+delimiter = " ";
+population_size = 200;
+number_of_iterations = 1000;
+
 
 struct Point{T<:AbstractFloat}
 	x::T
@@ -20,6 +28,10 @@ struct Region{T<:AbstractFloat}
 	radius::T
 end
 
+function show(r::Region, i)
+	println("Region $i: Center [$(r.center.x) $(r.center.y)] Radius $(r.radius)");
+end
+
 struct Configuration
 	points::Dict{Int32, Vector{Region}}
 	number_of_regions::Int32
@@ -29,12 +41,179 @@ end
 struct Individual
 	permutation::Vector{Int32}
 	starting_points::Vector{Int32}
+	starting_points_positions::Vector{Point{Float32}}
+	points_positions::Vector{Point{Float32}}
 end
+
+#=
+  Takes input and produces set of regions to visit
+=#
+function parseInput()
+	regions = [];
+	number_vehicles = 0;
+	starting_region = 0;
+	i = 1;
+	for l in eachline(input_file_path)
+		item = split(l, delimiter);
+		if i == 1
+			if(length(item) > 1)
+				error("Wrong input, provide number of vehicles in the first line.");
+			end
+			number_vehicles = parse(Int32, l);
+		elseif i == 2
+			# parse starting region
+			if(length(item) != 4)
+				error("Wrong input, error at line $i");
+			end
+			starting_region = Region(Point(parse(Float32, convert(String, item[2])),parse(Float32, convert(String, item[3]))), parse(Float32, convert(String, item[4])));
+		else
+			if(length(item) != 4)
+				error("Wrong input, error at line $i");
+			end
+			r = Region(Point(parse(Float32, convert(String, item[2])),parse(Float32, convert(String, item[3]))), parse(Float32, convert(String, item[4])));
+			push!(regions, r);
+		end
+		i = i + 1;
+    end
+	
+	return (number_vehicles, starting_region, regions);
+end
+
+#=
+  for given array of regions, it returns adjacency matrix in form 
+  A[i,j] == 1 - if region i overlaps with region j
+  A[i,j] == 0 otherwise
+=#
+function overlaps(a)
+	A = [(i == j) ? 1 : 0 for i in 1:length(a), j in 1:length(a)];
+	for i in 1:length(a), j in i+1:length(a)
+		A[i,j] = overlaps(a[i],a[j]);
+	end
+	
+	return A;
+end
+
+#=
+  takes adjacency matrix of regions as input and finds all the overlapping
+  regions from largest number of overlapping elements to smallest number
+  of overlapping elements
+=#
+function squash_regions(A)
+	# find cliques in the given graph
+	C = populate_cliques(A);
+	
+	# order cliques from largest to smallest
+	ordered = [];
+	for i in 1:length(C)
+		push!(ordered, (C[i], length(C[i])));
+	end
+	sort!(ordered, by = x -> x[2]);
+	
+	# separate cliques into arrays according to sizes
+	separated = [filter(x -> x[2] == i, ordered) for i in 1:size(A,1)];
+	println(separated);
+	
+	
+end
+
+
+function local_search(ind::Individual)
+	updating_points = [true for i in 1:length(ind.permutation)];
+	while(sum(updating_points > 0))
+		for i in 1:length(ind.permutation)
+		
+			# update each point with optimized point
+			if 1 < i < length(ind.permutation) - 1
+				#point = projected_point(ind.)
+			end
+			projected_point()
+		end
+	end
+end
+
+#=
+  Find projection for point point_c. Where point_a, point_b are neighbourhood points of point point_c.
+  point_c is the projected point and region_c is the region of point point_c.
+=#
+function projected_point(point_a::Point{Float32}, point_b::Point{Float32}, point_c::Point{Float32}, region_c::Region{Float32})
+	
+	# for points point_a, point_b find general equation of line
+	normal_vector_ab = (point_b.y - point_a.y, point_a.x - point_b.x);
+	general_line_equation_ab = (normal_vector_ab[1], normal_vector_ab[2], -normal_vector_ab[1]*point_a.x -normal_vector_ab[2]*point_a.y);
+	
+	# for line between points point_a, point_b we find general equation for perpendicular line
+	# to this line intersecting point_c
+	normal_vector_c_ab = (point_b.x - point_a.x, point_a.y - point_b.y);
+	general_line_equation_c_ab = (general_line_equation_c_ab[1], general_line_equation_c_ab[2], -general_line_equation_c_ab[1]*point_c.x 
+	-general_line_equation_c_ab[2]*point_c.y);
+	
+	#find intersection of line between points point_a and point_b and perpendicular line
+	# to this line containing point_c
+	intersection_y = (general_line_equation_ab[1]*general_line_equation_c_ab[3] - general_line_equation_ab[3]*general_line_equation_c_ab[1]) /
+		(general_line_equation_c_ab[1]*general_line_equation_ab[2] - general_line_equation_ab[1]*general_line_equation_c_ab[2]);
+	
+	intersection_x = (-general_line_equation_ab[2]*intersection_y - general_line_equation_ab[3]) / general_line_equation_ab[1];
+	
+	# find out if intersection lies on the line between points point_a and point_b
+	is_between = max(distance(intersection_x, intersection_y, point_a.x, point_a.y),
+		distance(intersection_x, intersection_y, point_b.x, point_b.y)) <=  distance(point_a.x, point_a.y, point_b.x, point_b.y);
+	if is_between
+		# find intersection of perpendicular line with region
+		(y1, y2) = solve_quadratic_equation(-general_line_equation_ab[2]/4 + 1, 
+			general_line_equation_ab[2]*general_line_equation_ab[3] + general_line_equation_ab[2]*region_c.center.x - 2*region_c.center.y,
+			-general_line_equation_ab[3]+2*general_line_equation_ab[3]*region_c.center.x+region_c.center.x^2+region_c.center.y^2-region_c.radius^2);
+		points = ([(-b/2 * y1 - general_line_equation_ab[3], y1), (-b/2 * y2 - general_line_equation_ab[3], y2)]);
+		
+		# return point closer to intersection point of two lines
+		if distance(points[1][1], points[1][2],intersection_x, intersection_y) < distance(points[2][1], points[2][2],intersection_x, intersection_y)
+			return points[1];
+		else
+			return points[2];
+		end
+	else
+		# find center of points point_a and point_b
+		(center_x, center_y) = ((point_b.x + point_a.x)/2, (point_b.y + point_a.y)/2);
+		
+		# calculate line equation for line connecting point_c and center
+		normal_vector = (point_c.y - center_y, center_x - point_c.x);
+		general_line_equation = (normal_vector[1], normal_vector[2], -normal_vector[1]*point_c.x -normal_vector[2]*point_c.y);
+		
+		# find intersection of line and region
+		(y1, y2) = solve_quadratic_equation(-general_line_equation[2]/4 + 1, 
+			general_line_equation[2]*general_line_equation[3] + general_line_equation[2]*region_c.center.x - 2*region_c.center.y,
+			-general_line_equation[3]+2*general_line_equation[3]*region_c.center.x+region_c.center.x^2+region_c.center.y^2-region_c.radius^2);
+		points = ([(-b/2 * y1 - general_line_equation[3], y1), (-b/2 * y2 - general_line_equation[3], y2)]);
+		
+		# return point closer to center of points point_a and point_b
+		if distance(points[1][1], points[1][2],center_x, center_y) < distance(points[2][1], points[2][2],center_x, center_y)
+			return points[1];
+		else
+			return points[2];
+		end
+	end
+end
+
+function distance(x1, y1, x2, y2)
+	return √((x1 - x2) ^ 2
+		+ (y1 - y2) ^ 2);
+end
+
+function distance(a::Point{Float32}, b::Point{Float32})
+	return √((a.x - b.x) ^ 2
+		+ (a.y - b.y) ^ 2);
+end
+
+# finds roots of quadrativ equation a*x^2 + b*x + c = 0
+function solve_quadratic_equation(a, b, c)
+	discriminant = b^2 - 4*a*c;
+	return ((-b + sqrt(discriminant)) / 2*a, (-b - sqrt(discriminant)) / 2*a);
+end
+
 
 function overlaps(a::Region, b::Region)
 
-	center_distance = √(abs(a.center.x - b.center.x) ^ 2
-		+ abs(a.center.y - b.center.y) ^ 2);
+	center_distance = √((a.center.x - b.center.x) ^ 2
+		+ (a.center.y - b.center.y) ^ 2);
 
 	return center_distance - a.radius - b.radius < 0
 end
@@ -52,27 +231,27 @@ function show(ind::Individual)
 	println(str);
 end
 
-function generate_individual(total_points::Integer, starting_points::Integer)
+function generate_individual(total_points_count::Integer, starting_points_count::Integer, starting_point::Point{Float32}, points::Vector{Point{Float32}})
 
-	if starting_points < 2
+	if starting_points_count < 2
 		throw(ArgumentError("individual should have at least two starting points"))
 	end
 
-	if total_points < 2
+	if total_points_count < 2
 		throw(ArgumentError("Individual should have at least two total points"))
 	end
 
 
-	permutation = randperm(total_points);
+	permutation = randperm(total_points_count);
 
 	taken = [];
 	free = LinkedStack{Integer}();
-	free_size = total_points;
-	for i in 1:total_points
+	free_size = total_points_count;
+	for i in 1:total_points_count
 		push!(free, i);
 	end
 
-	for i in 1:starting_points
+	for i in 1:starting_points_count
 		pos = rand(1:free_size);
 		push!(taken, popAt!(free, pos));
 		free_size = free_size - 1;
@@ -80,7 +259,9 @@ function generate_individual(total_points::Integer, starting_points::Integer)
 
 	sort!(taken);
 
-	return Individual(permutation, taken);
+	starting_points = [starting_point for i in 1:starting_points_count];
+	
+	return Individual(permutation, taken, starting_points, points[permutation]);
 end
 
 function crossover(left_ind::Individual, right_ind::Individual, point::Integer, keep_number_of_starting_points)
@@ -222,93 +403,6 @@ function combine_two_ordered_arrays(arr1::Array{T}, arr2::Array{T}) where {T<:Nu
 	end
 
 	return new_arr;
-end
-
-function crossover(ind1::Vector{Int32}, ind2::Vector{Int32}, point::Int32)
-	# check that individual length does not exceed the point of crossover
-	if	point >= length(ind1) ||
-		point == length(ind1) - 1 && ind2[length(ind1)] == 1 ||
-		point == length(ind1) - 2 && ind1[length(ind1)-2] == 1 && (ind2[length(ind1) - 1] == 1 || ind2[length(ind1)] == 1) ||
-
-		error("Crossover point outside possible range");
-	end
-
-	# if crossover would cause empty inner sequence at start of ind2 of first child
-	if ind1[point] == 1 && ind2[point+1] == 1
-		#swap two beginning points in individual2
-		swap = ind2[point+1];
-		ind2[point+1] = ind2[point+2];
-		ind2[point+2] = swap;
-	end
-
-	# if crossover would cause empty inner sequence at start of ind1 of second child
-	if ind2[point] == 1 && ind1[point+1] == 1
-		#swap two beginning points in individual1
-		swap = ind1[point+1];
-		ind1[point+1] = ind1[point+2];
-		ind1[point+2] = swap;
-	end
-
-
-	left_ind1 = copy(ind1[1:point]);
-
-	right_ind1 = copy(ind1[point+1:end]);
-	duplicates_ind1 = [];
-
-	for i in point+1:length(ind1)
-		not_found = 1;
-		for j in 1:length(right_ind1)
-			if ind2[i] == right_ind1[j]
-				right_ind1[j] = 0;
-				not_found = 0;
-				break;
-			end
-		end
-		if not_found == 1
-			push!(duplicates, i);
-		end
-		push!(left_ind1, ind2[i]);
-	end
-
-	# replace duplicate in child with available points
-	for i in 1:length(duplicates)
-		for j in 1:length(right_ind1)
-			if (right_ind1[j] != 0 && (right_ind1[j] != 1 || left_ind1[duplicates[i]-1] != 1))
-				left_ind1[duplicates[i]] = right_ind1[j];
-				break
-			end
-		end
-	end
-
-	left_ind2 = copy(ind2[1:point]);
-	right_ind2 = copy(ind2[point+1:end]);
-	duplicates = [];
-	for i in point+1:length(ind1)
-		not_found = 1;
-		for i in 1:length(right_ind2)
-			if(ind1[i] == right_ind2[j])
-				right_ind2[j] = 0;
-				not_found = 0;
-				break;
-			end
-		end
-		if not_found == 1
-			push!(duplicates, i);
-		end
-		push!(left_ind2, ind1[i]);
-	end
-
-	# replace duplicate in child with available points
-	for i in 1:length(duplicates)
-		for j in 1:length(right_ind2)
-			if (right_ind2[j] != 0 && (right_ind2[j] != 1 || left_ind2[duplicates[i]-1] != 1))
-				left_ind2[duplicates[i]] = right_ind2[j];
-				break;
-			end
-		end
-	end
-
-	return [left_ind1, left_ind2];
 end
 
 function testcrossoverproducesvalidoffspring()
@@ -487,11 +581,41 @@ function test_overlapping_regions()
 	@test !overlaps(a, b);
 end
 
+function main()
+	(number_vehicles, starting_region, regions) = parseInput();
+	centers = [regions[i].center for i in 1:length(regions)];
+	radiuses = [regions[i].radius for i in 1:length(regions)];
+
+	population = [generate_individual(length(regions), number_vehicles, starting_region.center, centers) for i in 1:population_size];
+	for i in 1:number_of_iterations
+		#local search
+		#evaluation
+		#selection
+		#crossover
+		#mutace
+	end
+	
+	
+end
+
+main();
 
 #test_overlapping_regions();
-test_mutate();
-test_crossover_bulk();
-test_generates_individual();
+#test_mutate();
+#@time test_crossover_bulk();
+#test_generates_individual();
 #testcrossoverproducesvalidoffspring();
 #test_combine_arrays();
+
+#s = parseInput();
+#for i in 1:length(s)
+#	show(s[i],i);
+#end
+
+#A = overlaps(s);
+#C = populate_cliques(A);
+#println(C);
+#squash_regions(A);
+
+
 end

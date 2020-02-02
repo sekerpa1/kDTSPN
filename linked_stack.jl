@@ -19,6 +19,9 @@ mutable struct StackNode{T} <: AbstractNode{T}
 end
 
 StackNode(prev::StackNode{Integer}, data::Integer) = StackNode{Integer}(prev, data);
+StackNode(prev::StackNode{Int64}, data::Int64) = StackNode{Int64}(prev, data);
+StackNode(prev::StackNode{Array{Integer}}, data::Array{Int64}) = StackNode{Array{Integer}}(prev, convert(Array{Integer}, data));
+StackNode(prev::StackNode{Array{Integer}}, data::Array{Integer}) = StackNode{Array{Integer}}(prev, data);
 StackNode(prev::StackNode{AbstractFloat}, data::AbstractFloat) = StackNode{AbstractFloat}(prev, data);
 
 mutable struct LinkedStack{T} <: AbstractStack{T}
@@ -27,6 +30,27 @@ mutable struct LinkedStack{T} <: AbstractStack{T}
 end
 
 isempty(s::AbstractStack) = (s.head.prev === s.head);
+
+function first(s::AbstractStack)
+	return s.head.data;
+end
+
+function last(s::AbstractStack)
+	head = s.head;
+	element = head.data;
+	while head.prev != head.prev.prev
+		element = head.prev.data;
+		head = head.prev;
+	end
+	
+	return element;
+end
+
+function empty!(s::AbstractStack)
+	while s.head != s.head.prev
+		s.head = s.head.prev;
+	end
+end
 
 function push!(s::AbstractStack, item)
 	a = StackNode(s.head, item);
@@ -195,11 +219,11 @@ function length(s::AbstractStack)
 end
 
 function tests()
-	s = StackNode{Integer}()
+	s = StackNode{Int64}()
 	@test s === s.prev
-	s2 = StackNode{Integer}(s, 10)
+	s2 = StackNode{Int64}(s, 10)
 	@test (s2.data === 10 && s2.prev === s2.prev.prev)
-	st = LinkedStack{Integer}();
+	st = LinkedStack{Int64}();
 	@test st.head === st.head.prev
 	@test isempty(st);
 
@@ -217,7 +241,7 @@ function tests()
 	@test pop!(st, 20) == false;
 	@test length(st) == 7;
 
-    sta = LinkedStack{Integer}();
+    sta = LinkedStack{Int64}();
     for i in 1:10
 		push!(sta, 10 - i + 1);
 	end
@@ -226,7 +250,7 @@ function tests()
     @test popAt!(sta, 2) == 3;
     @test popAt!(sta, 2) == 4;
 
-	stack = LinkedStack{Integer}();
+	stack = LinkedStack{Int64}();
 	for i in 1:5
 		push!(stack, i);
 	end
@@ -243,6 +267,25 @@ function tests()
 	st = LinkedStack{AbstractFloat}();
 	push!(st, 4.5);
 	@test pop!(st, 4.5);
+	
+	s = StackNode{Array{Integer}}();
+	st = LinkedStack{Array{Integer}}();
+	push!(st, [1]);
+	push!(st, [1,2,3]);
+	push!(st, [1,2,3,4]);
+	push!(st, [1,2,3,7]);
+	@test pop!(st, [1,2,3]);
+	@test pop!(st, [1,2,3,4]);
+	@test pop!(st, [1,2,3,7]);
+	
+	st = LinkedStack{Integer}();
+	push!(st,3);
+	empty!(st);
+	@test isempty(st);
+	push!(st,3);
+	push!(st,5);
+	@test last(st) == 3;
+	@test first(st) == 5;
 end
 
 function testInsertAndKeepOrder()
