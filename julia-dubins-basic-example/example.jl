@@ -107,8 +107,8 @@ function solve()
         idx2 = sequence[mod1(i+1, n)]
         q1 = [goals[idx1]..., headings[idx1]]
         q2 = [goals[idx2]..., headings[idx2]]
-		#println(q1);
-		#println(q2);
+		println(q1);
+		println(q2);
         @timeit to "dubins" begin
             dubins = dubins_shortest_path(q1, q2, turning_radius)[2]
         end

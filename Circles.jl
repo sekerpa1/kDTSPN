@@ -7,6 +7,13 @@ struct Point{T<:AbstractFloat}
 	y::T
 end
 
+Point(p::Tuple{T,T}) where T <: AbstractFloat = Point{T}(p[1], p[2]);
+
+struct Region{T<:AbstractFloat}
+	center::Point{T}
+	radius::T
+end
+
 function plotCircle(xy, radius)
     pyplot();
     circle = Circle(xy, radius, facecolor="yellow", edgecolor="orange",
@@ -17,6 +24,39 @@ end
 minimum = 3;
 maximum = 97;
 
+
+function plot_circle_and_points()
+
+#Finding projected point for : [ 6.71627 , 8.3767] , [ 10.6659, 6.6348] and point
+# c : [ 6.40217, 9.49307],
+#         and region: [3.41556 , 10.2848 , 0.5]
+
+	r = Region(Point(3.41556,10.2848), 0.5);
+	a = Point(6.71627,8.3767);
+	b = Point(10.6659,6.6348);
+	c = Point(6.40217,9.49307);
+	
+	#projected = projected_point(a, b, c, r);
+	#println(projected);
+	
+	xy = [r.center.x, r.center.y];
+	
+	plt.figure(1)
+    plt.clf()
+	ax = plt.gca();
+    circle = Circle(xy, r.radius, facecolor="red", edgecolor="red", 
+        linewidth=1, alpha=0.2);
+    ax.add_patch(circle);
+	plt.scatter([a.x, b.x, c.x],[a.y, b.y, c.y]);
+	
+	plt.title("Length = ")
+    plt.axis("equal")
+    plt.tight_layout()
+    plt.pause(0.1)
+
+    # save into a file
+    #plt.savefig("something.pdf")
+end
 
 function generate_polygon_equations(x)
 	XS = x[1];
@@ -320,6 +360,8 @@ function point_inside_polygon(x, y)
 end
 
 
+plot_circle_and_points();
+
 #basic_plot();
 #plot_stuff();
 
@@ -331,11 +373,11 @@ end
 #y = 1;
 #check_inequation(eq[1], 1, x, y);
 
-x = generate_polygons();
-XS = x[1];
-YS = x[2];
-plot_polygon(x);
-ex = generate_polygon_equations(x);
+#x = generate_polygons();
+#XS = x[1];
+#YS = x[2];
+#plot_polygon(x);
+#ex = generate_polygon_equations(x);
 #point_inside_polygon();
 
 
@@ -353,8 +395,8 @@ ex = generate_polygon_equations(x);
 #println(centroid(XS[15,2:4]));
 
 
-a = point_inside_polygon(centroid(XS[20,2:4]),centroid(YS[20,2:4]));
-println(a .> 0);
+#a = point_inside_polygon(centroid(XS[20,2:4]),centroid(YS[20,2:4]));
+#println(a .> 0);
 #println(point_inside_polygon(centroid(XS[25,2:4]),centroid(YS[25,2:4])));
 #println(point_inside_polygon(centroid(XS[30,2:4]),centroid(YS[30,2:4])));
 #println(point_inside_polygon(centroid(XS[35,2:4]),centroid(YS[35,2:4])));
