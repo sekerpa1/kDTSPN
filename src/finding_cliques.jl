@@ -99,6 +99,6 @@ function testBigger()
 	@test isempty(res) && isempty(st);
 end
 
-@time @testset "FindingCliques" begin tests() end
+#@time @testset "FindingCliques" begin tests() end
 
 

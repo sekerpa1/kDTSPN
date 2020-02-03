@@ -304,7 +304,7 @@ function testInsertAndKeepOrder()
 	end
 end
 
-@time @testset "Stack" begin tests() end
+#@time @testset "Stack" begin tests() end
 
 export StackNode, LinkedStack
 

@@ -8,13 +8,14 @@ using Dubins
 using Random
 using Test
 using PyPlot
+
 include("./linked_stack.jl")
-include("./FindingCliques.jl")
+include("./finding_cliques.jl")
 using .Stack
 
 Circle = matplotlib.patches.Circle
 
-input_file_path = "./problem.txt";
+input_file_path = "./../input/problem.txt";
 delimiter = " ";
 population_size = 200;
 crossover_ratio = 0.2;
@@ -218,10 +219,6 @@ function local_search!(ind::Individual, regions::Vector{Region})
 		current_sequence_to_ind_points_positions = [x - 1 for x in current_sequence[2:end]];
 		current_points = vcat(ind.starting_points_positions[i], ind.points_positions[current_sequence_to_ind_points_positions]);
 		
-		#for i in 1:length(current_sequence)
-		#	println(current_points[i]," ",regions[current_sequence[i]]);
-		#end
-		
 		# while not converged optimize current subsequence
 		while diff > local_search_stop_criterion
 			
@@ -267,25 +264,16 @@ end
 
 function projected_point(point_a::Point{T}, point_b::Point{T}, point_c::Point{T}, region_c::Region{T}) where T <: AbstractFloat
 	
-	#println("Finding projected point for : [ $(point_a.x) , $(point_a.y)] , [ $(point_b.x), $(point_b.y)] and point c : [ $(point_c.x), $(point_c.y)],
-	# and region: [$(region_c.center.x) , $(region_c.center.y) , $(region_c.radius)]");
-	
-	
 	# for points point_a, point_b find general equation of line
 	normal_vector_ab = (point_b.y - point_a.y, point_a.x - point_b.x);
 	general_line_equation_ab = (normal_vector_ab[1], normal_vector_ab[2], -normal_vector_ab[1]*point_a.x -normal_vector_ab[2]*point_a.y);
-	#println(normal_vector_ab);
-	#println(general_line_equation_ab);
-	
 	
 	# for line between points point_a, point_b we find general equation for perpendicular line
 	# to this line intersecting point_c
 	normal_vector_c_ab = (-normal_vector_ab[2], normal_vector_ab[1]);
 	general_line_equation_c_ab = (normal_vector_c_ab[1], normal_vector_c_ab[2], -normal_vector_c_ab[1]*point_c.x 
 	-normal_vector_c_ab[2]*point_c.y);
-	#println(normal_vector_c_ab);
-	#println(general_line_equation_c_ab);
-	
+
 	#find intersection of line between points point_a and point_b and perpendicular line
 	# to this line containing point_c
 	(intersection_x, intersection_y) = find_intersection_of_line_and_line(general_line_equation_ab[1], general_line_equation_ab[2],general_line_equation_ab[3],
@@ -443,62 +431,6 @@ function point_lies_within_circle(x, y, s1, s2, r)
 	return (x-s1)^2 + (y-s2)^2 <= r^2;
 end
 
-function testDubins()
-	q1 = [3.0,2.0, pi];
-	q2 = [3.5,3.2, 0];
-	#q1 = [3.0,2.0, rand(0:0.001:1)*2*pi];
-	#q2 = [3.5,3.2, rand(0:0.001:1)*2*pi];
-	turning_radius = 0.7;
-	dubins = dubins_shortest_path(q1, q2, turning_radius)[2];
-	samples = dubins_path_sample_many(dubins, turning_radius * 0.1)[2];
-	println(dubins);
-	plt.figure(1);
-    plt.clf();
-	ax = plt.gca();
-	plt.scatter([q1[1],q2[1]],[q1[2],q2[2]]);
-	
-	x_val = [x[1] for x in samples];
-    y_val = [x[2] for x in samples];
-	
-	plt.plot(x_val, y_val);
-	plt.title("Length = ");
-    plt.axis("equal");
-    plt.tight_layout();
-    plt.pause(0.1);
-end
-
-function testProjectPoint()
-	r = Region(Point(8.0,5.0), 2.0);
-	a = Point(3.0,2.0);
-	b = Point(6.0,2.0);
-	c = Point(8.0,5.0);
-	
-	projected = projected_point(a, b, c, r);
-	println(projected);
-	
-	xy = [r.center.x, r.center.y];
-	
-	plt.figure(1)
-    plt.clf()
-	ax = plt.gca();
-    circle = Circle(xy, r.radius, facecolor="red", edgecolor="red", 
-        linewidth=1, alpha=0.2);
-    ax.add_patch(circle);
-	plt.scatter([a.x, b.x, c.x],[a.y, b.y, c.y]);
-	plt.scatter(projected[1],projected[2]);
-	#plt.scatter([a.x, b.x, c.x],[a.y, b.y, c.y],markersize=3,alpha=.8,legend=false);
-	#plt.plot(c.x, c.y, specs = "b");
-	#plt.plot(projected[1], projected[2], specs = "b");
-	
-	plt.title("Length = ")
-    plt.axis("equal")
-    plt.tight_layout()
-    plt.pause(0.1)
-
-    # save into a file
-    #plt.savefig("something.pdf")
-end
-
 #=
   takes general equation of line 1 represented by parameters a1, b1, c1
   and general equation of line 2 represented by parameters a2, b2, c2
@@ -526,7 +458,6 @@ end
  the radius of the circle
 =#
 function find_intersection_of_line_and_circle(a1, b1, c1, s1, s2, r)
-	#println(a1," ",b1," ",c1," ",s1," ",s2," ",r);
 	if(a1 == 0)
 		y = -c1/b1;
 		b = -2*s1;
@@ -537,9 +468,9 @@ function find_intersection_of_line_and_circle(a1, b1, c1, s1, s2, r)
 	a = b1^2/a1^2 + 1;
 	b = 2*b1*c1/a1^2 + 2*s1*b1/a1 - 2*s2;
 	c = c1^2/a1^2+2*s1*c1/a1 + s1^2 + s2^2 - r^2;
-	#println(a, " ",b," ",c);
+	
 	(y1, y2) = solve_quadratic_equation(a, b, c);
-	#println(y1," ", y2);
+	
 	if y1 == y2
 		b = -2*s1;
 		c = s1^2 + y1^2 - 2*s2*y1 + s2^2 - r^2;
@@ -774,182 +705,6 @@ function combine_two_ordered_arrays(arr1::Array{T}, arr2::Array{T}) where {T<:Nu
 	return new_arr;
 end
 
-function testcrossoverproducesvalidoffspring()
-	perm1 = [1,2,3,4,5,6];
-	starting_points1 = [1,3,4];
-	ind1 = Individual(perm1, starting_points1);
-
-	perm2 = [2,3,4,5,6,1];
-	starting_points2 = [1,5,6];
-	ind2 = Individual(perm2, starting_points2);
-
-	st1 = LinkedStack{Integer}();
-	for i in 1:length(perm1)
-		push!(st1, perm1[i]);
-	end
-
-	st2 = LinkedStack{Integer}();
-	for i in 1:length(perm2)
-		push!(st2, perm2[i]);
-	end
-
-	child1 = crossover(ind1, ind2, 3, true);
-	child2 = crossover(ind2, ind1, 3, true);
-
-	println(child1.permutation);
-	println(child1.starting_points);
-	println(child2.permutation);
-	println(child2.starting_points);
-
-	@assert length(child1.permutation) == length(perm1)
-	for i in 1:length(child1.permutation)
-		@assert pop!(st1, child1.permutation[i]);
-	end
-	@assert isempty(st1);
-
-	@assert length(child2.permutation) == length(perm2)
-	for i in 1:length(perm2)
-		@assert pop!(st2, child2.permutation[i]);
-	end
-	@assert isempty(st2);
-
-	st_startingpoints1 = LinkedStack{Integer}();
-	@assert length(child1.starting_points) == 3;
-	for i in 1:length(child1.starting_points)
-		@assert !pop!(st_startingpoints1, child1.starting_points[i]);
-		push!(st_startingpoints1, child1.starting_points[i]);
-	end
-
-	st_startingpoints2 = LinkedStack{Integer}();
-	@assert length(child2.starting_points) == 3;
-	for i in 1:length(child2.starting_points)
-		@assert !pop!(st_startingpoints2, child2.starting_points[i]);
-		push!(st_startingpoints2, child2.starting_points[i]);
-	end
-end
-
-function test_crossover_bulk()
-	for i in 1:10000
-		test_crossover();
-	end
-end
-
-function test_crossover()
-
-	total_points = 10;
-	starting_points = 3;
-
-	ind1 = generate_individual(total_points, starting_points);
-	ind2 = generate_individual(total_points, starting_points);
-
-	keep = true;
-	point = 5;
-
-	child = crossover(ind1, ind2, point, keep);
-
-	# verify that left part of the child remains the same as in left individual
-	@assert isequal(ind1.permutation[1:point], child.permutation[1:point]);
-
-	left_start_points = filter(x -> x <= point, ind1.starting_points);
-	child_left_start_points = filter(x -> x <= point, child.starting_points);
-
-	@assert isequal(left_start_points, child_left_start_points);
-
-
-	# check that child contains all points
-	points = [false for x in 1:total_points];
-
-	@assert isequal(length(child.permutation), total_points);
-	for i in 1:length(child.permutation)
-		points[child.permutation[i]] = true;
-	end
-
-	for i in 1:length(points)
-		@assert points[i]
-	end
-
-	# check starting points of the child
-	stack = LinkedStack{Integer}();
-	@assert isequal(length(child.starting_points), starting_points)
-	for i in 1:length(child.starting_points)
-		@assert pop!(stack, child.starting_points[i]) == false
-		push!(stack, child.starting_points[i]);
-	end
-end
-
-function test_mutate()
-	total_points = 10;
-	starting_points = 3;
-
-	ind1 = generate_individual(total_points, starting_points);
-
-	mutate!(ind1);
-	stack = LinkedStack{Integer}();
-	for i in 1:length(ind1.permutation)
-		push!(stack, i)
-	end
-
-	# test individual contains all points excatly once
-	for i in 1:length(ind1.permutation)
-		@assert pop!(stack, ind1.permutation[i])
-	end
-
-	# test starting points do not have duplicates
-	stack = LinkedStack{Integer}();
-	for i in 1:length(ind1.starting_points)
-		@assert pop!(stack, ind1.starting_points[i]) == false;
-		push!(stack, ind1.starting_points[i])
-	end
-
-end
-
-function test_generates_individual()
-	total_points = 10;
-	starting_points = 3;
-	ind = generate_individual(total_points, starting_points);
-
-	stack = LinkedStack{Integer}();
-	for i in 1:total_points
-		push!(stack, i);
-	end
-
-	for i in 1:total_points
-		@assert pop!(stack, ind.permutation[i]);
-	end
-
-	stack = LinkedStack{Integer}();
-	for i in 1:length(ind.starting_points)
-		@assert pop!(stack, ind.starting_points[i]) == false
-		push!(stack, ind.starting_points[i]);
-	end
-end
-
-function test_combine_arrays()
-	arr1 = [1,4,5,6];
-	arr2 = [2,7,8];
-
-	arr = combine_two_ordered_arrays(arr1, arr2);
-	@assert arr[1] === 1;
-	@assert arr[2] === 2;
-	@assert arr[3] === 4;
-	@assert arr[4] === 5;
-	@assert arr[5] === 6;
-	@assert arr[6] === 7;
-	@assert arr[7] === 8;
-end
-
-function test_overlapping_regions()
-
-	a = Region(Point(1.0,1.0), 3.0);
-	b = Region(Point(2.0,2.0), 3.0);
-	@test overlaps(a, b);
-
-	a = Region(Point(1.0,1.0), 3.0);
-	b = Region(Point(10.0,10.0), 2.0);
-
-	@test !overlaps(a, b);
-end
-
 function show(ind::Individual, regions::Vector{Region})
 	
 	plt.figure(1)
@@ -968,7 +723,6 @@ function show(ind::Individual, regions::Vector{Region})
 		for j in ind.permutation[ind.starting_points[i]:last]
 			push!(trajectory, [ind.points_positions[j].x, ind.points_positions[j].y, ind.points_directions[j]]);
 		end
-		println(length(trajectory));
 		
 		# add starting point again to the end of trajectory
 		push!(trajectory, [ind.starting_points_positions[i].x, ind.starting_points_positions[i].y, ind.starting_points_directions[i]]);
@@ -1018,7 +772,7 @@ function main()
 	region_count = length(regions);
 	
 	population = [generate_individual(region_count, number_vehicles, starting_region.center, centers) for i in 1:population_size];
-	println(typeof(population));
+	
 	crossover_count = round(crossover_ratio*population_size);
 	crossover_count = convert(Integer, crossover_count);
 	if isodd(crossover_count)
@@ -1087,27 +841,9 @@ function main()
 	end 
 	show(best_found, regions);
 end
-	
-#testProjectPoint();
-#testDubins();
+
 main();
 
-#test_overlapping_regions();
-#test_mutate();
-#@time test_crossover_bulk();
-#test_generates_individual();
-#testcrossoverproducesvalidoffspring();
-#test_combine_arrays();
-
-#s = parseInput();
-#for i in 1:length(s)
-#	show(s[i],i);
-#end
-
-#A = overlaps(s);
-#C = populate_cliques(A);
-#println(C);
-#squash_regions(A);
-
+export Point, Region
 
 end
