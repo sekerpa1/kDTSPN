@@ -94,20 +94,6 @@ function parseInput()
 end
 
 #=
-  for given array of regions, it returns adjacency matrix in form 
-  A[i,j] == 1 - if region i overlaps with region j
-  A[i,j] == 0 otherwise
-=#
-function overlaps(a)
-	A = [(i == j) ? 1 : 0 for i in 1:length(a), j in 1:length(a)];
-	for i in 1:length(a), j in i+1:length(a)
-		A[i,j] = overlaps(a[i],a[j]);
-	end
-	
-	return A;
-end
-
-#=
   Calculate Dubins shortest path for individual using Dubins maneuvers
 =#
 function evaluate_individual!(ind::Individual, regions::Vector{Region})
