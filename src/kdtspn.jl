@@ -108,29 +108,6 @@ function overlaps(a)
 end
 
 #=
-  takes adjacency matrix of regions as input and finds all the overlapping
-  regions from largest number of overlapping elements to smallest number
-  of overlapping elements
-=#
-function squash_regions(A)
-	# find cliques in the given graph
-	C = populate_cliques(A);
-	
-	# order cliques from largest to smallest
-	ordered = [];
-	for i in 1:length(C)
-		push!(ordered, (C[i], length(C[i])));
-	end
-	sort!(ordered, by = x -> x[2]);
-	
-	# separate cliques into arrays according to sizes
-	separated = [filter(x -> x[2] == i, ordered) for i in 1:size(A,1)];
-	println(separated);
-	
-	
-end
-
-#=
   Calculate Dubins shortest path for individual using Dubins maneuvers
 =#
 function evaluate_individual!(ind::Individual, regions::Vector{Region})
