@@ -47,6 +47,9 @@ function show(r::Region, i)
 	println("Region $i: Center [$(r.center.x) $(r.center.y)] Radius $(r.radius)");
 end
 
+#=
+  Object representing individual solution of the kdtspn problem.
+=#
 mutable struct Individual
 	permutation::Vector{Int32}
 	starting_points::Vector{Int32}
@@ -224,7 +227,10 @@ function local_search!(ind::Individual, regions::Vector{Region})
 	end
 end
 
-
+#=
+  Find projection for point point_c. Where point_a, point_b are neighbourhood points of point point_c.
+  point_c is the projected point and region_c is the region of point point_c.
+=#
 function projected_point(point_a::Point{T}, point_b::Point{T}, point_c::Point{T}, region_c::Region{T}) where T <: AbstractFloat
 	
 	# for points point_a, point_b find general equation of line
@@ -316,19 +322,6 @@ end
 function distance(x1, y1, x2, y2)
 	return √((x1 - x2) ^ 2
 		+ (y1 - y2) ^ 2);
-end
-
-function distance(a::Point{Float64}, b::Point{Float64})
-	return √((a.x - b.x) ^ 2
-		+ (a.y - b.y) ^ 2);
-end
-
-function overlaps(a::Region, b::Region)
-
-	center_distance = √((a.center.x - b.center.x) ^ 2
-		+ (a.center.y - b.center.y) ^ 2);
-
-	return center_distance - a.radius - b.radius < 0
 end
 
 #=

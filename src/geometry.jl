@@ -52,6 +52,20 @@ function move_point_closer_to_circle(x, y, s1, s2,r)
 	return (x,y);
 end
 
+function overlaps(a::Region, b::Region)
+
+	center_distance = √((a.center.x - b.center.x) ^ 2
+		+ (a.center.y - b.center.y) ^ 2);
+
+	return center_distance - a.radius - b.radius < 0
+end
+
+
+function distance(a::Point{Float64}, b::Point{Float64})
+	return √((a.x - b.x) ^ 2
+		+ (a.y - b.y) ^ 2);
+end
+
 #=
   Find projection for point point_c. Where point_a, point_b are neighbourhood points of point point_c.
   point_c is the projected point and region_c is the region of point point_c.
