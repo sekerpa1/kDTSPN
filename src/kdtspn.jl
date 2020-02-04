@@ -372,6 +372,9 @@ function generate_individual(total_points_count::Integer, starting_points_count:
 	return Individual(permutation, taken, starting_points, starting_points_directions, points[permutation], points_directions, DEFAULT_FITTNESS);
 end
 
+#=
+  generates one child for two individual. Full offspring can be produced by permuting left and right parent
+=#
 function crossover(left_ind::Individual, right_ind::Individual, point::Integer, keep_number_of_starting_points)
 
 	if point >= length(left_ind.permutation)-1 || point <= 1
@@ -472,6 +475,9 @@ function crossover(left_ind::Individual, right_ind::Individual, point::Integer, 
 		copy(left_ind.points_positions), copy(left_ind.points_directions), DEFAULT_FITTNESS);
 end
 
+#=
+  Simple mutation operator. Randomly swaps two points in the individual permutation
+=#
 function mutate!(ind::Individual)
 	pos = rand(1:length(ind.permutation));
 	if pos > length(ind.permutation) / 2
@@ -575,26 +581,33 @@ function show(ind::Individual, regions::Vector{Region})
 end
 
 function main()
+
+	# parse problem file
 	(number_vehicles, starting_region, regions) = parseInput();
 	centers = [regions[i].center for i in 1:length(regions)];
 	radiuses = [regions[i].radius for i in 1:length(regions)];
 	region_count = length(regions);
 	
+	# generate random initial population
 	population = [generate_individual(region_count, number_vehicles, starting_region.center, centers) for i in 1:population_size];
 	
+	# calculate count of individuals selected for crossover
 	crossover_count = round(crossover_ratio*population_size);
 	crossover_count = convert(Integer, crossover_count);
 	if isodd(crossover_count)
 			crossover_count = crossover_count - 1;
 	end
 	
+	# calculate point for the implemented single point crossover
 	crossover_point = 0.5;
 	crossover_point = round(crossover_point*region_count);
 	crossover_point = convert(Integer, crossover_point);
 	
-	empty_individual = Individual([],[],[],[],[],[], typemax(Float64));
-	best_found = empty_individual;
+	# set initial best solution 
+	evaluate_individual!(population[1], regions);
+	best_found = population[1];
 	
+	# concatenate regions
 	local_regions = Vector{Region}();
 	push!(local_regions, starting_region);
 	for i in 1:length(regions)
@@ -603,31 +616,36 @@ function main()
 	regions = local_regions;
 	
 	for i in 1:number_of_iterations
+	
 		# local search
-		
-		
 		for i in 1:length(population)
 			local_search!(population[i], regions);
 		end
 		
-		#evaluation
+		# evaluation
 		for i in 1:length(population)
 			evaluate_individual!(population[i], regions);
 		end
 	
-		#selection
+		# selection
 		sort!(population, by = p -> p.fittness);
-		#update best found individual
+		
+		# update best found individual
 		if best_found.fittness > population[1].fittness
 			best_found = population[1];
 			println(best_found.fittness);
 		end
+		
+		# keep only the best individuals
 		population = population[1:population_size];
 		
+		# select random top individuals for crossover
+		# set number of selected individuals to approximately (crossover_ratio * population_size)
 		pairs = randperm(crossover_count);
 		half = round(crossover_count/2);
 		half = convert(Integer, half);
 		
+		# divide individuals into two groups randomly
 		lefts = population[pairs[1:half]];
 		rights = population[half+1:end];
 		
