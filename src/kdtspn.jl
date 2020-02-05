@@ -15,16 +15,20 @@ using .Stack
 
 Circle = matplotlib.patches.Circle
 
-input_file_path = "./../input/problem.txt";
-delimiter = " ";
-population_size = 200;
-crossover_ratio = 0.2;
+const input_file_path = "./../input/problem.txt";
+const delimiter = " ";
+const population_size = 500;
+const crossover_ratio = 0.2;
 
-mutation_probability = 0.5;
-number_of_iterations = 200;
-turning_radius = 0.7;
+const mutation_probability = 0.5;
+const number_of_iterations = 200;
+const turning_radius = 0.7;
 
 DEFAULT_FITTNESS = typemax(Float64);
+
+# plot settings
+const starting_region_color = "red";
+const region_color = "blue";
 
 # local search stops when optimized points converge to a value that is
 # less than this number away from previously optimized value
@@ -92,60 +96,79 @@ function parseInput()
 		end
 		i = i + 1;
     end
-	
+
 	return (number_vehicles, starting_region, regions);
 end
 
 #=
   Calculate Dubins shortest path for individual using Dubins maneuvers
+  !note - current solution doesnt use AA algorithm yet but approximates
+  every two neighbor points using Dubins maneuver
 =#
 function evaluate_individual!(ind::Individual, regions::Vector{Region})
 
 	max_path_length = 0;
 	for i in 1:length(ind.starting_points)
-	
+
+		# get points sequence and point directions for current vehicle
 		last = i == length(ind.starting_points) ? length(ind.permutation) : ind.starting_points[i+1]-1;
 		current_points = vcat(ind.starting_points_positions[i], ind.points_positions[ind.permutation[ind.starting_points[i]:last]]);
 		directions = vcat(ind.starting_points_directions[i], ind.points_directions[ind.permutation[ind.starting_points[i]:last]]);
-		
+
+		# calculate dubins path for current vehicle
 		d_path_vehicle = [];
 		for j in 1:length(current_points)-1
-			d_path = dubins_shortest_path([current_points[j].x, current_points[j].y, directions[j]], 
+			d_path = dubins_shortest_path([current_points[j].x, current_points[j].y, directions[j]],
 				[current_points[j+1].x,current_points[j+1].y, directions[j+1]], turning_radius);
 			if d_path[1] != 0
 				error("Error when calculating dubins path, error code $(d_path[1])");
 			end
 			push!(d_path_vehicle, d_path[2]);
 		end
-		
-		d_path = dubins_shortest_path([current_points[length(current_points)].x, current_points[length(current_points)].y, directions[length(current_points)]], 
+
+		d_path = dubins_shortest_path([current_points[length(current_points)].x, current_points[length(current_points)].y, directions[length(current_points)]],
 				[current_points[1].x,current_points[1].y, directions[1]], turning_radius);
 		if(d_path[1] != 0)
 			error("Error when calculating dubins path, error code $(d_path[1])");
 		end
-		
+
 		max_path_length = max(max_path_length, sum(broadcast(x -> dubins_path_length(x), d_path_vehicle)));
 	end
-	
+
 	ind.fittness = max_path_length;
 end
 
+
 #=
-  calculate direction for dubins path for point c and its neighbors point a and point b
-  point a lies immediately before point c in sequence and point b lies immediately after point c
+ calculate direction for dubins path for vector [x,y]
 =#
-function get_direction(a::Point{T}, b::Point{T}, c::Point{T}) where T <: AbstractFloat
-	v = (b.x - a.x, b.y - a.y);
+function get_direction(v::Tuple{T,T}) where T <: AbstractFloat
 	n = sqrt(v[1]^2 + v[2]^2);
 	v = v ./ n;
-	cos_l1 = v[1]*1/(sqrt(v[1]^2+v[2]^2)*sqrt(1));
-	cos_l2 = v[2]*1/(sqrt(v[1]^2+v[2]^2)*sqrt(1));
-	
-	if acos(cos_l2) > pi/2
-		return 2*pi - acos(cos_l1);
+
+	# calculate cos of angle α between v and normal vector [1,0] using scalar product
+	a_unit = (1.0, 0.0);
+	cos_a = v[1]*a_unit[1]+v[2]*a_unit[2];
+
+	# calculate cos of angle ß between v and normal vector [0,-1] using scalar product
+	b_unit = (0.0, -1.0);
+	cos_b = v[1]*b_unit[1]+v[2]*b_unit[2];
+
+	# if v is in upper quadrant of the unit cirle (π, 3/2 π, 2π)
+	# calculate direction as 2 X π - α
+	if acos(cos_b) > pi/2
+		return 2*π - acos(cos_a);
 	else
-		return acos(cos_l1);
+		return acos(cos_a);
 	end
+end
+
+#=
+  calculate direction for dubins path for point
+=#
+function get_direction(a::Point{T}, b::Point{T}) where T <: AbstractFloat
+	v = (b.x - a.x, b.y - a.y);
+	get_direction((v[1],v[2]));
 end
 
 #=
@@ -154,76 +177,93 @@ end
   regions = starting_region ∪ regions. Updates the supplied individual with new set of points
 =#
 function local_search!(ind::Individual, regions::Vector{Region})
-	
+
 	points = [ind.permutation[i] + 1 for i in 1:length(ind.permutation)];
-	
+
 	#add starting points to sequence of points
 	all_points = [];
 	for i in 1:length(ind.starting_points)-1
 		all_points = vcat(all_points, 1, points[ind.starting_points[i]:ind.starting_points[i+1]-1]);
 	end
-	
+
 	all_points = vcat(all_points, 1, points[ind.starting_points[length(ind.starting_points)]:end]);
-	
-	# update starting points indexes 
+
+	# update starting points indexes
 	starting_points = [ind.starting_points[i]+i-1 for i in 1:length(ind.starting_points)];
-	
+
 	#reinitialize point positions to center of circles
 	positions = [regions[i].center for i in 2:length(regions)];
 	ind.points_positions[1:end] = positions[1:end];
-	
+
 	for i in 1:length(ind.starting_points_positions)
 		ind.starting_points_positions[i] = regions[1].center;
 	end
-	
+
 	len = length(starting_points);
 	for i in 1:len
 		diff = typemax(Float64);
 		current_sequence = (i==len ? all_points[starting_points[i]:end] : all_points[starting_points[i]:starting_points[i+1]-1]);
-		
+
 		# add starting point specific to sequence and rest of the points to current points
 		current_sequence_to_ind_points_positions = [x - 1 for x in current_sequence[2:end]];
 		current_points = vcat(ind.starting_points_positions[i], ind.points_positions[current_sequence_to_ind_points_positions]);
-		
+
 		# while not converged optimize current subsequence
 		while diff > local_search_stop_criterion
-			
+
 			# optimize points
-			optimized = [j == length(current_sequence) ? 
-			projected_point(current_points[j-1], current_points[1], 
+			optimized = [j == length(current_sequence) ?
+			projected_point(current_points[j-1], current_points[1],
 				current_points[j], regions[current_sequence[j]]) :
-			j == 1 ? projected_point(current_points[length(current_sequence)], current_points[j+1], 
+			j == 1 ? projected_point(current_points[length(current_sequence)], current_points[j+1],
 				current_points[j], regions[current_sequence[j]]) :
-			projected_point(current_points[j-1],current_points[j+1], 
+			projected_point(current_points[j-1],current_points[j+1],
 				current_points[j], regions[current_sequence[j]])
 			for j in 1:length(current_sequence)];
-			
+
 			diff = distance(optimized, current_points);
 			current_points = optimized;
+
 		end
-		
+
+		# set directions, for odd points set directions according to heuristic,
+		# for even points set directions to point to the the next point for AA algorithm
+		# is_odd = [isodd(i) for i in 1:length(current_points)];
+		# directions = [is_odd[i] ?
+		# for i in 1:length(current_points)];
+
 		# copy optimized points back to individual
 		ind.starting_points_positions[i] = current_points[1];
-		
+
 		# start from second point as first is starting point
 		for j in 2:length(current_sequence)
 			ind.points_positions[current_sequence[j]-1] = current_points[j];
 		end
-		
-		#=
+
 		# optimize point directions
-		current_directions = [j == 1 ? get_direction(current_points[end],current_points[j+1],current_points[j]) :
-			j == length(current_sequence) ? get_direction(current_points[j-1],current_points[1],current_points[j]) :
-			get_direction(current_points[j-1], current_points[j+1], current_points[j])
+		diff = typemax(Float64);
+		current_directions = vcat(ind.starting_points_directions[i], ind.points_directions[current_sequence_to_ind_points_positions]);
+
+		while diff > local_search_stop_criterion
+			optimized = [j == 1 ? get_direction(current_points[end],current_points[j+1]) :
+			j == length(current_sequence) ? get_direction(current_points[j-1],current_points[1]) :
+			get_direction(current_points[j-1], current_points[j+1])
 			for j in 1:length(current_sequence)];
+			
+			distances = (optimized .- current_directions);
+			distances = broadcast(x -> abs(x), distances);
+			diff = sum(distances);
+			println(diff);
+			current_directions = optimized;
+		end
 		
 		# copy directions back to individual
 		ind.starting_points_directions[i] = current_directions[1];
-		
+
 		# start from second point as first is starting point
 		for j in 2:length(current_sequence)
 			ind.points_directions[current_sequence[j]-1] = current_directions[j];
-		end =#
+		end
 	end
 end
 
@@ -232,26 +272,26 @@ end
   point_c is the projected point and region_c is the region of point point_c.
 =#
 function projected_point(point_a::Point{T}, point_b::Point{T}, point_c::Point{T}, region_c::Region{T}) where T <: AbstractFloat
-	
+
 	# for points point_a, point_b find general equation of line
 	normal_vector_ab = (point_b.y - point_a.y, point_a.x - point_b.x);
 	general_line_equation_ab = (normal_vector_ab[1], normal_vector_ab[2], -normal_vector_ab[1]*point_a.x -normal_vector_ab[2]*point_a.y);
-	
+
 	# for line between points point_a, point_b we find general equation for perpendicular line
 	# to this line intersecting point_c
 	normal_vector_c_ab = (-normal_vector_ab[2], normal_vector_ab[1]);
-	general_line_equation_c_ab = (normal_vector_c_ab[1], normal_vector_c_ab[2], -normal_vector_c_ab[1]*point_c.x 
+	general_line_equation_c_ab = (normal_vector_c_ab[1], normal_vector_c_ab[2], -normal_vector_c_ab[1]*point_c.x
 	-normal_vector_c_ab[2]*point_c.y);
 
 	#find intersection of line between points point_a and point_b and perpendicular line
 	# to this line containing point_c
 	(intersection_x, intersection_y) = find_intersection_of_line_and_line(general_line_equation_ab[1], general_line_equation_ab[2],general_line_equation_ab[3],
 		general_line_equation_c_ab[1],general_line_equation_c_ab[2],general_line_equation_c_ab[3]);
-	
+
 	# find out if intersection lies on the line between points point_a and point_b
 	is_between = max(distance(intersection_x, intersection_y, point_a.x, point_a.y),
 		distance(intersection_x, intersection_y, point_b.x, point_b.y)) <=  distance(point_a.x, point_a.y, point_b.x, point_b.y);
-	
+
 	projection_vector = normal_vector_c_ab;
 	if !is_between
 		#= if intersection point does not lie between the points point_a and point_b, calculate projection vector
@@ -259,11 +299,11 @@ function projected_point(point_a::Point{T}, point_b::Point{T}, point_c::Point{T}
 		(center_x, center_y) = ((point_b.x + point_a.x)/2, (point_b.y + point_a.y)/2);
 		projection_vector = (center_x - point_c.x, center_y - point_c.y);
 	end
-	
+
 	#normalize the projection vector
 	val = sqrt(projection_vector[1]^2+projection_vector[2]^2);
 	projection_vector = projection_vector ./ val;
-	
+
 	# optimize point position using projection vector
 	stopping_diff = 0.1;
 	n = 1;
@@ -297,7 +337,7 @@ end
 #=
   takes general equation of line 1 represented by parameters a1, b1, c1
   and general equation of line 2 represented by parameters a2, b2, c2
-  and returns intersection point 
+  and returns intersection point
 =#
 function find_intersection_of_line_and_line(a1,b1,c1,a2,b2,c2)
   if a1 == 0
@@ -308,10 +348,10 @@ function find_intersection_of_line_and_line(a1,b1,c1,a2,b2,c2)
 	x = -c2/a2 - (b2*c1)/(a2*b1);
 	return (x,y);
   end
-  
+
   y = (-c2 + c1*a2/a1)/(-b1*a2/a1 +b2);
   x = (-b1*y - c1)/a1;
-  
+
   return (x,y);
 end
 
@@ -344,17 +384,17 @@ function generate_individual(total_points_count::Integer, starting_points_count:
 	permutation = randperm(total_points_count);
 
 	taken = [];
-	
+
 	# automatically add 1 as starting point
 	push!(taken, 1);
-	
+
 	# add other starting points randomly, starting from 2...
 	free = LinkedStack{Integer}();
 	free_size = total_points_count-1;
 	for i in 2:total_points_count
 		push!(free, i);
 	end
-	
+
 	for i in 2:starting_points_count
 		pos = rand(1:free_size);
 		push!(taken, popAt!(free, pos));
@@ -364,11 +404,11 @@ function generate_individual(total_points_count::Integer, starting_points_count:
 	sort!(taken);
 
 	starting_points = [starting_point for i in 1:starting_points_count];
-	
+
 	points_directions = [pi for i in 1:total_points_count];
-	
+
 	starting_points_directions = [pi for i in 1:starting_points_count];
-	
+
 	return Individual(permutation, taken, starting_points, starting_points_directions, points[permutation], points_directions, DEFAULT_FITTNESS);
 end
 
@@ -520,64 +560,72 @@ function combine_two_ordered_arrays(arr1::Array{T}, arr2::Array{T}) where {T<:Nu
 	return new_arr;
 end
 
+function show_console(ind::Individual)
+	println(ind);
+end
+
 function show(ind::Individual, regions::Vector{Region})
-	
-	plt.figure(1)
-    plt.clf()
+
+	pygui(true);
+	plt.figure(1);
+    plt.clf();
 	ax = plt.gca();
-	
+
 	# plot trajectories
 	palette = ["red", "blue", "cyan", "green", "purple"];
-	
+
 	for i in 1:length(ind.starting_points)
 		last = (i == length(ind.starting_points)) ? length(ind.permutation) : ind.starting_points[i+1]-1;
-		
+
 		# add points to trajectory
 		trajectory = [];
 		push!(trajectory, [ind.starting_points_positions[i].x, ind.starting_points_positions[i].y, ind.starting_points_directions[i]]);
 		for j in ind.permutation[ind.starting_points[i]:last]
 			push!(trajectory, [ind.points_positions[j].x, ind.points_positions[j].y, ind.points_directions[j]]);
 		end
-		
+
 		# add starting point again to the end of trajectory
 		push!(trajectory, [ind.starting_points_positions[i].x, ind.starting_points_positions[i].y, ind.starting_points_directions[i]]);
-		
+
 		c = palette[rand(1:length(palette))];
 		for j in 1:length(trajectory)-1
 			dubins = dubins_shortest_path(trajectory[j], trajectory[j+1], turning_radius)[2];
 			samples = dubins_path_sample_many(dubins, turning_radius * 0.1)[2];
-			
+
 			x_val = [x[1] for x in samples];
 			y_val = [x[2] for x in samples];
-			
+
 			plt.plot(x_val, y_val, color=c);
 		end
 	end
-	
+
 	# plot points
 	for i in 1:length(ind.starting_points_positions)
 		plt.scatter(ind.starting_points_positions[i].x,ind.starting_points_positions[i].y, color="black");
 	end
-	
+
 	for i in 1:length(ind.points_positions)
 		plt.scatter(ind.points_positions[i].x,ind.points_positions[i].y, color="black");
 	end
-	
+
 	# plot regions
 	for i in 1:length(regions)
 		center = [regions[i].center.x, regions[i].center.y];
 		radius = regions[i].radius;
-		circle = Circle(center, radius, facecolor="red", edgecolor="red", 
-        linewidth=1, alpha=0.2);
-		ax.add_patch(circle)
+		circle = Circle(center, radius, edgecolor= (i == 1 ? starting_region_color : region_color), 
+		facecolor=(i == 1 ? starting_region_color : region_color), alpha=0.2);
+		ax.add_patch(circle);
+		plt.plot(regions[i].center.x, regions[i].center.y);
 	end
 	
+	
+
 	plt.title("Length = ");
     plt.axis("equal");
     plt.tight_layout();
     plt.pause(0.1);
 	plt.savefig("result.pdf");
-	
+	show_console(ind);
 end
 
 function main()
@@ -587,26 +635,26 @@ function main()
 	centers = [regions[i].center for i in 1:length(regions)];
 	radiuses = [regions[i].radius for i in 1:length(regions)];
 	region_count = length(regions);
-	
+
 	# generate random initial population
 	population = [generate_individual(region_count, number_vehicles, starting_region.center, centers) for i in 1:population_size];
-	
+
 	# calculate count of individuals selected for crossover
 	crossover_count = round(crossover_ratio*population_size);
 	crossover_count = convert(Integer, crossover_count);
 	if isodd(crossover_count)
 			crossover_count = crossover_count - 1;
 	end
-	
+
 	# calculate point for the implemented single point crossover
 	crossover_point = 0.5;
 	crossover_point = round(crossover_point*region_count);
 	crossover_point = convert(Integer, crossover_point);
-	
-	# set initial best solution 
+
+	# set initial best solution
 	evaluate_individual!(population[1], regions);
 	best_found = population[1];
-	
+
 	# concatenate regions
 	local_regions = Vector{Region}();
 	push!(local_regions, starting_region);
@@ -614,41 +662,41 @@ function main()
 		push!(local_regions, regions[i]);
 	end
 	regions = local_regions;
-	
+
 	for i in 1:number_of_iterations
-	
+
 		# local search
 		for i in 1:length(population)
 			local_search!(population[i], regions);
 		end
-		
+
 		# evaluation
 		for i in 1:length(population)
 			evaluate_individual!(population[i], regions);
 		end
-	
+
 		# selection
 		sort!(population, by = p -> p.fittness);
-		
+
 		# update best found individual
 		if best_found.fittness > population[1].fittness
 			best_found = population[1];
 			println(best_found.fittness);
 		end
-		
+
 		# keep only the best individuals
 		population = population[1:population_size];
-		
+
 		# select random top individuals for crossover
 		# set number of selected individuals to approximately (crossover_ratio * population_size)
 		pairs = randperm(crossover_count);
 		half = round(crossover_count/2);
 		half = convert(Integer, half);
-		
+
 		# divide individuals into two groups randomly
 		lefts = population[pairs[1:half]];
 		rights = population[half+1:end];
-		
+
 		#crossover
 		offspring = [];
 		for i in 1:length(lefts)
@@ -663,9 +711,9 @@ function main()
 			push!(offspring, child_1);
 			push!(offspring, child_2);
 		end
-		
+
 		population = vcat(population, offspring);
-	end 
+	end
 	show(best_found, regions);
 end
 
