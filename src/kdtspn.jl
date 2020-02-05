@@ -268,9 +268,7 @@ function local_search!(ind::Individual, regions::Vector{Region})
 			distances = (optimized .- current_directions);
 			distances = broadcast(x -> abs(x), distances);
 			diff = sum(distances);
-			if isnan(diff)
-				error("");
-			end
+			
 			current_directions = optimized;
 		end
 		
