@@ -64,7 +64,7 @@ mutable struct Individual
 	fittness::Float64
 end
 
-isless(a::Main.kDTSPN.Individual, b::Main.kDTSPN.Individual) = isless(a.fittness, b.fittness);
+isless(a::Individual, b::Individual) = isless(a.fittness, b.fittness);
 
 #=
   Takes input and produces set of regions to visit
@@ -102,8 +102,6 @@ end
 
 #=
   Calculate Dubins shortest path for individual using Dubins maneuvers
-  !note - current solution doesnt use AA algorithm yet but approximates
-  every two neighbor points using Dubins maneuver
 =#
 function evaluate_individual!(ind::Individual, regions::Vector{Region})
 
@@ -164,7 +162,7 @@ function get_direction(v::Tuple{T,T}) where T <: AbstractFloat
 end
 
 #=
-  calculate direction for dubins path for point
+  calculate direction for Dubins path for point
 =#
 function get_direction(a::Point{T}, b::Point{T}) where T <: AbstractFloat
 	v = (b.x - a.x, b.y - a.y);
@@ -172,9 +170,11 @@ function get_direction(a::Point{T}, b::Point{T}) where T <: AbstractFloat
 end
 
 #=
-  calculates new positions for points of individual, accepts individual definition
-  and vector of regions, which contains union of starting region with rest of the regions
-  regions = starting_region ∪ regions. Updates the supplied individual with new set of points
+  Do the local search for individuals according to heuristic.
+  For each individual point, place the waypoints within the regions: 
+  p_dir = projection of point p_i onto line connecting points p_i-1 and p_i+1, if α, β ≤ 90◦,
+  where α is angle (p_i+1,p_i-1,p_i) and β is angle (p_i-1,p_i+1,p_i).
+  p_dir = middle point between p_i-1 and p_i+1 otherwise.
 =#
 function local_search!(ind::Individual, regions::Vector{Region})
 
@@ -283,7 +283,7 @@ function local_search!(ind::Individual, regions::Vector{Region})
 end
 
 #=
-  Find projection for point point_c. Where point_a, point_b are neighbourhood points of point point_c.
+  Find projection for point point_c. Where point_a, point_b are neighborhood points of point point_c.
   point_c is the projected point and region_c is the region of point point_c.
 =#
 function projected_point(point_a::Point{T}, point_b::Point{T}, point_c::Point{T}, region_c::Region{T}) where T <: AbstractFloat
