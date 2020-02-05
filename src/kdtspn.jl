@@ -201,9 +201,30 @@ function local_search!(ind::Individual, regions::Vector{Region})
 
 	len = length(starting_points);
 	for i in 1:len
-		diff = typemax(Float64);
-		current_sequence = (i==len ? all_points[starting_points[i]:end] : all_points[starting_points[i]:starting_points[i+1]-1]);
 
+		current_sequence = (i==len ? all_points[starting_points[i]:end] : all_points[starting_points[i]:starting_points[i+1]-1]);
+		if length(current_sequence) == 2
+			# if current sequence has only two points - starting point 
+			# and another point, move points closer to each other
+			region_1 = regions[current_sequence[1]];
+			region_2 = regions[current_sequence[2]];
+			v = (region_2.center.x - region_1.center.x , region_2.center.y - region_1.center.y);
+			v = v ./ sqrt(v[1]^2 + v[2]^2);
+			
+			# move starting point
+			ind.starting_points_positions[i] = Point(ind.starting_points_positions[i].x + v[1]*region_1.radius,
+				ind.starting_points_positions[i].y + v[2]*region_1.radius);
+			
+			# move second point
+			point_index = current_sequence[2]-1;
+			ind.points_positions[point_index] = Point(ind.points_positions[i].x - v[1]*region_2.radius,
+				ind.points_positions[i].y - v[2]*region_2.radius);
+			
+			return;
+		end
+		
+		diff = typemax(Float64);
+		
 		# add starting point specific to sequence and rest of the points to current points
 		current_sequence_to_ind_points_positions = [x - 1 for x in current_sequence[2:end]];
 		current_points = vcat(ind.starting_points_positions[i], ind.points_positions[current_sequence_to_ind_points_positions]);
@@ -226,12 +247,6 @@ function local_search!(ind::Individual, regions::Vector{Region})
 
 		end
 
-		# set directions, for odd points set directions according to heuristic,
-		# for even points set directions to point to the the next point for AA algorithm
-		# is_odd = [isodd(i) for i in 1:length(current_points)];
-		# directions = [is_odd[i] ?
-		# for i in 1:length(current_points)];
-
 		# copy optimized points back to individual
 		ind.starting_points_positions[i] = current_points[1];
 
@@ -253,7 +268,9 @@ function local_search!(ind::Individual, regions::Vector{Region})
 			distances = (optimized .- current_directions);
 			distances = broadcast(x -> abs(x), distances);
 			diff = sum(distances);
-			println(diff);
+			if isnan(diff)
+				error("");
+			end
 			current_directions = optimized;
 		end
 		

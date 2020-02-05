@@ -199,7 +199,7 @@ function testRegionIntersections()
     plt.pause(0.1);
 end
 
-testRegionIntersections();
+#testRegionIntersections();
 #println(contains_any_element([1,2,3,4,5] , [2,3]));
 
 #input = [[1,2,3],[2,3],[3,4],[1],[3,5,6,7], [], [8,7,2,5,7,8],[4,5]];
