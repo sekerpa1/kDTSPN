@@ -516,7 +516,7 @@ function crossover(left_ind::Individual, right_ind::Individual, point::Integer, 
 			#= if actual number of points would be fewer, collect all unused points,
 			  that are not part of the right starting points of the right individual
 			=#
-			unused_points = LinkedStack{Integer}();
+			unused_points = MutableLinkedList{Integer}();
 			unused_points_length = 0;
 			j = 1;
 			for i in point+1:length(left_ind.permutation)
@@ -536,7 +536,8 @@ function crossover(left_ind::Individual, right_ind::Individual, point::Integer, 
 			add_points = Vector{Int32}();
 			for i in 1:abs(diff)
 				next = rand(1:unused_points_length);
-				p = popAt!(unused_points, next);
+				p = getindex(unused_points, next);
+				delete!(unused_points, next);
 				push!(add_points, p);
 				unused_points_length = unused_points_length - 1;
 			end
