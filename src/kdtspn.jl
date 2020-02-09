@@ -21,7 +21,10 @@ Circle = matplotlib.patches.Circle
 const input_file_path = "./../input/problem.txt";
 const delimiter = " ";
 const population_size = 500;
+const tournament_size = 10;
+const tournament_selection_probability = 0.95
 const crossover_ratio = 0.2;
+const elitism = 10;
 
 const mutation_probability = 0.5;
 const number_of_iterations = 200;
@@ -673,6 +676,35 @@ function show(ind::Individual, regions::Vector{Region})
 	show_console(ind);
 end
 
+function tournament_selection(population, crossover_count)
+	selected_for_crossover = [];
+	for i in 1:crossover_count
+		p = randperm(population_size);
+		picked_part = p[1:tournament_size];
+		tournament_selected = population[picked_part];
+		sort!(tournament_selected, by = x -> x.fittness);
+		selected = false;
+		selected_index = 1;
+		while !selected
+			# get random number between 0.0 and 1.0
+			r = rand();
+			if r > (1 - tournament_selection_probability)
+				selected = true;
+			# if none selected yet and end of array reached, select first(fittest) individual
+			elseif selected_index == tournament_size
+				selected_index = 1;
+				break;
+			end
+			selected_index += 1;
+		end
+				
+		selected_individual = tournament_selected[selected_index];
+		push!(selected_for_crossover, selected_individual);
+	end
+	
+	return selected_for_crossover;
+end
+
 function main()
 
 	# parse problem file
@@ -731,18 +763,33 @@ function main()
 				println(best_found.fittness);
 			end
 
-			# keep only the best individuals
-			population = population[1:population_size];
+			# keep the top individuals specified by elitism constant (elitism)
+			best_individuals = population[1:elitism];
+			
+			# select the rest of the individuals at random from the population
+			rest_of_population = population[elitism+1:end];
+			rest_size = length(rest_of_population);
+			
+			rest_selected = randperm(rest_size);
+			selected_from_rest_of_population = rest_of_population[rest_selected];
+			
+			# construct new population from kept individuals
+			population = vcat(best_individuals, selected_from_rest_of_population);
 
 			# select random top individuals for crossover
 			# set number of selected individuals to approximately (crossover_ratio * population_size)
-			pairs = randperm(crossover_count);
+			# use tournament selection
+			@timeit to "Tournament Selection" selected_for_crossover = tournament_selection(population, crossover_count);
+			
+			# crossover selected part of individuals
+			
+			# divide them into two groups
 			half = round(crossover_count/2);
 			half = convert(Integer, half);
 
 			# divide individuals into two groups randomly
-			lefts = population[pairs[1:half]];
-			rights = population[half+1:end];
+			lefts = selected_for_crossover[1:half];
+			rights = selected_for_crossover[half+1:end];
 
 			#crossover
 			offspring = [];
