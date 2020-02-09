@@ -11,9 +11,32 @@ struct Point{T<:AbstractFloat}
 	y::T
 end
 
-struct Region{T<:AbstractFloat}
+struct Region{T}
 	center::Point{T}
 	radius::T
+end
+
+struct IntersectionPoint{T<:AbstractFloat}
+	x::T
+	y::T
+	parents::Vector{Region{T}}
+end
+
+function isequal(a::Region, b::Region)
+	return a.center.x == b.center.x && a.center.y == b.center.y && a.radius == b.radius;
+end
+
+function mutual_parents(parents_1::Vector{Region}, parents_2::Vector{Region})
+	
+	parents = [];
+	for i in 1:length(parents_1)
+		for j in 1:length(parents_2)
+			if isequal(parents_1[i], parents_2[j])
+				push!(parents);
+			end
+		end
+	end
+	return parents;
 end
 
 #= takes as input list of element arrays
@@ -56,6 +79,108 @@ function remove_used(list, used_elements)
 	return new_list;
 end
 
+function point_lies_within_all_circles(point::Point, regions::Vector{Region})
+	return sum(x -> point_lies_within_circle(point, x), regions) == length(regions);
+end
+
+function point_lies_within_circle(point::Point, region::Region)
+	return distance(point, region.center) < region.radius;
+end
+
+function center_of_points(points::Vector{Point})
+	
+	center = Point(0.0,0.0);
+	for i in 1:length(points)
+		center.x += points[i].x;
+		center.y += points[i].y;
+	end
+	
+	return center/length(points);
+end
+
+function calculate_intersection_area(points::Vector{IntersectionPoint}, circles::Vector{Region})
+	
+	# filter out points that do not lie in all circles
+	points_inside = filter(x -> point_lies_within_all_circles(x, circles), points);
+	
+	# find center of points
+	center = center_of_points(points_inside);
+	
+	#find angle of points and center
+	angles = (p -> atan(p.x - center.x, p.y - center.y), points_inside);
+	
+	
+	# calculate radius of circle centered in the center of polygon area
+	radius = sqrt((points_inside[1].x - center.x)^2 + (points_inside[2].y - center.y)^2);
+	
+	# sort polygon points on sizes of angles
+	polygon_points = [(angles[i], points_inside[i]) for i in 1:length(angles)];
+	sort!(polygon_points);
+	
+	# calculate polygon area
+	area = 0;
+	for i in 1:length(polygon_points)
+	
+		# update polygon area
+		alpha = i == 1 ? angles[1] : angles[i] - angles[i-1];
+		area += 1/2*r^2*sin(alpha);
+	end
+	
+	p1 = points_inside[length(points_inside)];
+	
+	# calculate arc area
+	for i in 1:length(points_inside)
+		p2 = points_inside[i];
+		
+		# get mutual parents of points
+		parents = mutual_parents(p1.parents, p2.parents);
+		arc_length = typemax(Float64);
+		index = 0;
+		arc_angle = 0;
+		
+		for j in 1:length(parents)
+			center = parents[i].center;
+			radius = parents[i].radius;
+			
+			# calculate arc length
+			
+			#find angle of points and center
+			alpha_p1 = atan(p1.x - center.x, p1.y - center.y);
+			alpha_p2 = atan(p2.x - center.x, p2.y - center.y);
+			angle_between = abs(alpha_p1 - alpha_p2);
+			
+			length = angle_between/2π * (2*π*radius);
+			
+			# keep minimum length arc, region
+			if(length < arc_length)
+				#update parent index and arc length
+				index = j;
+				arc_length = length;
+				arc_angle = angle_between;
+			end
+		end
+		
+		# calculate arc area with minimum length
+		
+		# calculate area of the part of the circle
+		circle_part = π*r^2 * (arc_angle/(2*π));
+		
+		#calculate area in between center and arc
+		area_center_arc = 1/2*r^2*sin(arc_angle);
+		
+		arc_area = circle_part - area_center_arc;
+		# add up to the whole area
+		area += arc_area;
+		
+		p1 = p2;
+	end
+	
+	return (center, area);
+end
+
+
+
+
 #= find intersection points of two regions. If two circles intersect,
  the algorithm first projects circles, so that the left circle is placed at 
  point (0,0) and both centers intersect x axis. It calculates the intersection
@@ -65,11 +190,12 @@ function intersection(a::Region, b::Region)
 	
 	center_distance = distance(a.center.x, a.center.y, b.center.x, b.center.y);
 	if center_distance > a.radius + b.radius
-		return ();
+		return IntersectionPoint();
 	elseif center_distance == a.radius + b.radius
 		# if circles are touching each other
 		mag = a.radius/center_distance;
-		return (a.center.x + (a.center.x - b.center.x)*mag, a.center.y + (a.center.y - b.center.y)*mag);
+		return IntersectionPoint(a.center.x + (a.center.x - b.center.x)*mag, a.center.y + (a.center.y - b.center.y)*mag,
+			[a,b]);
 	elseif center_distance + a.radius == b.radius || center_distance  + b.radius == a.radius
 		# if one circle is inside another circle
 		(smaller, bigger) = a.radius > b.radius ? (b,a) : (a,b);
@@ -81,7 +207,8 @@ function intersection(a::Region, b::Region)
 		v = v/sqrt(v[1]^2, v[2]^2);
 		
 		# calculate intersection point using radius of bigger circle as magnitude 
-		return v .* bigger.radius;
+		v = v .* bigger.radius;
+		return IntersectionPoint(v[1], v[2], [a,b]);
 	end
 	
 	# alias the left most circle
@@ -148,12 +275,16 @@ function intersection(a::Region, b::Region)
 	x1,x2 = x1 + left.center.x, x2 + left.center.x;
 	y1,y2 = y1 + displacement, y2 + displacement;
 	
-	return ((x1,y1),(x2,y2));
+	return (IntersectionPoint(x1,y1, [a,b]), IntersectionPoint(x2,y2, [a,b]));
 end
 
 function distance(x1, y1, x2, y2)
 	return √((x1 - x2) ^ 2
 		+ (y1 - y2) ^ 2);
+end
+
+function distance(a::Point, b::Point)
+	return distance(a.x, a.y, b.x, b.y);
 end
 
 function project_points_on_center(x1,y1,x2,y2)
@@ -169,6 +300,34 @@ function contains_any_element(list, used_elements)
 	return sum(map(y -> !isempty(filter(x -> x == y, list)), used_elements)) > 0;
 end
 
+function testIntersectionArea()
+	a = Region(Point(0.02,0.77), 0.75);
+	b = Region(Point(0.89,0.08), 0.78);
+	c = Region(Point(0.74,0.91), 0.95);
+	
+	intersection_points = Vector{IntersectionPoint}();
+	intersection_p  = intersection(a,b);
+	push!(intersection_points, intersection_p[1]);
+	push!(intersection_points, intersection_p[2]);
+	
+	intersection_p  = intersection(b,c);
+	push!(intersection_points, intersection_p[1]);
+	push!(intersection_points, intersection_p[2]);
+	
+	intersection_p  = intersection(a,c);
+	push!(intersection_points, intersection_p[1]);
+	push!(intersection_points, intersection_p[2]);
+	println(typeof(intersection_points);
+	println(typeof([a,b,c]));
+	
+	(center, area) = calculate_intersection_area(intersection_points, [a,b,c]);
+	println(area);
+	#Area:	0.28245
+	#Polygon Area:	0.09531
+	#Arc Area:	0.18714
+end
+
+testIntersectionArea();
 
 function testRegionIntersections()
 	#a = Region(Point(3.0,4.0),2.0);

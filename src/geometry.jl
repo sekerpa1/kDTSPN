@@ -1,4 +1,4 @@
-
+using TimerOutputs
 
 # finds roots of quadratic equation a*x^2 + b*x + c = 0
 function solve_quadratic_equation(a, b, c)

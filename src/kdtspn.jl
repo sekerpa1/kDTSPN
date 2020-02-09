@@ -8,6 +8,7 @@ using Dubins
 using Random
 using Test
 using PyPlot
+using DataStructures
 
 include("./linked_stack.jl")
 include("./finding_cliques.jl")
@@ -124,8 +125,10 @@ function evaluate_individual!(ind::Individual, regions::Vector{Region})
 			push!(d_path_vehicle, d_path[2]);
 		end
 
-		d_path = dubins_shortest_path([current_points[length(current_points)].x, current_points[length(current_points)].y, directions[length(current_points)]],
+		d_path = dubins_shortest_path([current_points[length(current_points)].x, 
+		current_points[length(current_points)].y, directions[length(current_points)]],
 				[current_points[1].x,current_points[1].y, directions[1]], turning_radius);
+		
 		if(d_path[1] != 0)
 			error("Error when calculating dubins path, error code $(d_path[1])");
 		end
@@ -345,6 +348,9 @@ function projected_point(point_a::Point{T}, point_b::Point{T}, point_c::Point{T}
 	end
 end
 
+#=
+	x - x coordinate of 2d point
+=#
 function point_lies_within_circle(x, y, s1, s2, r)
 	return (x-s1)^2 + (y-s2)^2 <= r^2;
 end
@@ -404,7 +410,8 @@ function generate_individual(total_points_count::Integer, starting_points_count:
 	push!(taken, 1);
 
 	# add other starting points randomly, starting from 2...
-	free = LinkedStack{Integer}();
+	free = MutableLinkedList{Integer}();
+	
 	free_size = total_points_count-1;
 	for i in 2:total_points_count
 		push!(free, i);
@@ -412,7 +419,9 @@ function generate_individual(total_points_count::Integer, starting_points_count:
 
 	for i in 2:starting_points_count
 		pos = rand(1:free_size);
-		push!(taken, popAt!(free, pos));
+		val = getindex(free, pos);
+		delete!(free, pos);
+		push!(taken, val);
 		free_size = free_size - 1;
 	end
 
@@ -428,6 +437,24 @@ function generate_individual(total_points_count::Integer, starting_points_count:
 end
 
 #=
+  Removes element, if it is present inside collection and returns true. If element is not present inside collection
+  returns false.
+=#
+function isAvailable!(list, element)
+	j = 1;
+	for i in list
+		if i == element
+			delete!(list, j);
+			return true;
+		end
+		
+		j += 1;
+	end
+	
+	return false;
+end
+
+#=
   generates one child for two individual. Full offspring can be produced by permuting left and right parent
 =#
 function crossover(left_ind::Individual, right_ind::Individual, point::Integer, keep_number_of_starting_points)
@@ -440,7 +467,7 @@ function crossover(left_ind::Individual, right_ind::Individual, point::Integer, 
 	child_perm = copy(left_ind.permutation[1:point]);
 
 	# copy the right leftover part of the permutation from left individual
-	leftover_perm = LinkedStack{Integer}();
+	leftover_perm = MutableLinkedList{Integer}();
 	for i in point+1:length(left_ind.permutation)
 		push!(leftover_perm, left_ind.permutation[i]);
 	end
@@ -448,7 +475,7 @@ function crossover(left_ind::Individual, right_ind::Individual, point::Integer, 
 	# copy the right part of the permutation from right individual
 	duplicates = [];
 	for i in point+1:length(left_ind.permutation)
-		isavailable = pop!(leftover_perm, right_ind.permutation[i]);
+		isavailable = isAvailable!(leftover_perm, right_ind.permutation[i]);
 		push!(child_perm, right_ind.permutation[i]);
 
 		# if element has been added already, store the index of the element
@@ -457,7 +484,7 @@ function crossover(left_ind::Individual, right_ind::Individual, point::Integer, 
 		end
 	end
 
-	# assign the rematining points that are not part of the permutation
+	# assign the remaining points that are not part of the permutation
 	for i in 1:length(duplicates)
 		child_perm[duplicates[i]] = pop!(leftover_perm);
 	end
@@ -653,7 +680,7 @@ function main()
 
 	# generate random initial population
 	population = [generate_individual(region_count, number_vehicles, starting_region.center, centers) for i in 1:population_size];
-
+	
 	# calculate count of individuals selected for crossover
 	crossover_count = round(crossover_ratio*population_size);
 	crossover_count = convert(Integer, crossover_count);
@@ -661,7 +688,7 @@ function main()
 			crossover_count = crossover_count - 1;
 	end
 
-	# calculate point for the implemented single point crossover
+	# calculate point for the implemented point crossover
 	crossover_point = 0.5;
 	crossover_point = round(crossover_point*region_count);
 	crossover_point = convert(Integer, crossover_point);
@@ -679,55 +706,54 @@ function main()
 	regions = local_regions;
 
 	for i in 1:number_of_iterations
-
-		# local search
-		for i in 1:length(population)
-			local_search!(population[i], regions);
-		end
-
-		# evaluation
-		for i in 1:length(population)
-			evaluate_individual!(population[i], regions);
-		end
-
-		# selection
-		sort!(population, by = p -> p.fittness);
-
-		# update best found individual
-		if best_found.fittness > population[1].fittness
-			best_found = population[1];
-			println(best_found.fittness);
-		end
-
-		# keep only the best individuals
-		population = population[1:population_size];
-
-		# select random top individuals for crossover
-		# set number of selected individuals to approximately (crossover_ratio * population_size)
-		pairs = randperm(crossover_count);
-		half = round(crossover_count/2);
-		half = convert(Integer, half);
-
-		# divide individuals into two groups randomly
-		lefts = population[pairs[1:half]];
-		rights = population[half+1:end];
-
-		#crossover
-		offspring = [];
-		for i in 1:length(lefts)
-			child_1 = crossover(lefts[i], rights[i], crossover_point, true);
-			if rand() > 0.5
-				mutate!(child_1);
+			# local search
+			for i in 1:length(population)
+				local_search!(population[i], regions);
 			end
-			child_2 = crossover(rights[i], lefts[i], crossover_point, true);
-			if rand() > 0.5
-				mutate!(child_2);
-			end
-			push!(offspring, child_1);
-			push!(offspring, child_2);
-		end
 
-		population = vcat(population, offspring);
+			# evaluation
+			for i in 1:length(population)
+				evaluate_individual!(population[i], regions);
+			end
+
+			# selection
+			sort!(population, by = p -> p.fittness);
+
+			# update best found individual
+			if best_found.fittness > population[1].fittness
+				best_found = population[1];
+				println(best_found.fittness);
+			end
+
+			# keep only the best individuals
+			population = population[1:population_size];
+
+			# select random top individuals for crossover
+			# set number of selected individuals to approximately (crossover_ratio * population_size)
+			pairs = randperm(crossover_count);
+			half = round(crossover_count/2);
+			half = convert(Integer, half);
+
+			# divide individuals into two groups randomly
+			lefts = population[pairs[1:half]];
+			rights = population[half+1:end];
+
+			#crossover
+			offspring = [];
+			for i in 1:length(lefts)
+				child_1 = crossover(lefts[i], rights[i], crossover_point, true);
+				if rand() > 0.5
+					mutate!(child_1);
+				end
+				child_2 = crossover(rights[i], lefts[i], crossover_point, true);
+				if rand() > 0.5
+					mutate!(child_2);
+				end
+				push!(offspring, child_1);
+				push!(offspring, child_2);
+			end
+
+			population = vcat(population, offspring);
 	end
 	show(best_found, regions);
 end
