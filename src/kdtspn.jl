@@ -9,10 +9,12 @@ using Random
 using Test
 using PyPlot
 using DataStructures
+using TimerOutputs
 
-include("./linked_stack.jl")
+# Create a TimerOutput, this is the main type that keeps track of everything.
+const to = TimerOutput()
+
 include("./finding_cliques.jl")
-using .Stack
 
 Circle = matplotlib.patches.Circle
 
@@ -117,7 +119,7 @@ function evaluate_individual!(ind::Individual, regions::Vector{Region})
 		# calculate dubins path for current vehicle
 		d_path_vehicle = [];
 		for j in 1:length(current_points)-1
-			d_path = dubins_shortest_path([current_points[j].x, current_points[j].y, directions[j]],
+			@timeit to "Dubins" d_path = dubins_shortest_path([current_points[j].x, current_points[j].y, directions[j]],
 				[current_points[j+1].x,current_points[j+1].y, directions[j+1]], turning_radius);
 			if d_path[1] != 0
 				error("Error when calculating dubins path, error code $(d_path[1])");
@@ -125,7 +127,7 @@ function evaluate_individual!(ind::Individual, regions::Vector{Region})
 			push!(d_path_vehicle, d_path[2]);
 		end
 
-		d_path = dubins_shortest_path([current_points[length(current_points)].x, 
+		@timeit to "Dubins" d_path = dubins_shortest_path([current_points[length(current_points)].x, 
 		current_points[length(current_points)].y, directions[length(current_points)]],
 				[current_points[1].x,current_points[1].y, directions[1]], turning_radius);
 		
@@ -680,7 +682,9 @@ function main()
 	region_count = length(regions);
 
 	# generate random initial population
-	population = [generate_individual(region_count, number_vehicles, starting_region.center, centers) for i in 1:population_size];
+	@timeit to "Init" begin 
+		population = [generate_individual(region_count, number_vehicles, starting_region.center, centers) for i in 1:population_size];
+	end
 	
 	# calculate count of individuals selected for crossover
 	crossover_count = round(crossover_ratio*population_size);
@@ -707,18 +711,19 @@ function main()
 	regions = local_regions;
 
 	for i in 1:number_of_iterations
+		@timeit to "Iteration" begin
 			# local search
 			for i in 1:length(population)
-				local_search!(population[i], regions);
+				@timeit to "Local" local_search!(population[i], regions);
 			end
 
 			# evaluation
 			for i in 1:length(population)
-				evaluate_individual!(population[i], regions);
+				@timeit to "Individual" evaluate_individual!(population[i], regions);
 			end
 
 			# selection
-			sort!(population, by = p -> p.fittness);
+			@timeit to "Sort" sort!(population, by = p -> p.fittness);
 
 			# update best found individual
 			if best_found.fittness > population[1].fittness
@@ -742,25 +747,26 @@ function main()
 			#crossover
 			offspring = [];
 			for i in 1:length(lefts)
-				child_1 = crossover(lefts[i], rights[i], crossover_point, true);
+				@timeit to "Crossover" child_1 = crossover(lefts[i], rights[i], crossover_point, true);
 				if rand() > 0.5
-					mutate!(child_1);
+					@timeit to "Mutate" mutate!(child_1);
 				end
-				child_2 = crossover(rights[i], lefts[i], crossover_point, true);
+				@timeit to "Crossover" child_2 = crossover(rights[i], lefts[i], crossover_point, true);
 				if rand() > 0.5
-					mutate!(child_2);
+					@timeit to "Mutate" mutate!(child_2);
 				end
 				push!(offspring, child_1);
 				push!(offspring, child_2);
 			end
 
 			population = vcat(population, offspring);
+		end
 	end
-	show(best_found, regions);
+	@timeit to "Show" show(best_found, regions);
 end
 
 main();
-
+println(to);
 export Point, Region
 
 end
