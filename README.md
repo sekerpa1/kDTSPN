@@ -1,5 +1,5 @@
 # kDTSPN
-Implementation of k- Dubins Traveling Salesman Problem with Neighbourhoods.
+Implementation of k-Dubins Traveling Salesman Problem with Neighbourhoods.
 
 Prerequisities:
 
